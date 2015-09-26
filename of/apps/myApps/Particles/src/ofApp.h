@@ -28,5 +28,6 @@ private:
     ofVec2f pMin, pMax;                  // bounds on ball position
     ofVec2f p[N_BALLS];                 // ball positions
     ofVec2f v[N_BALLS];                 // ball velocities
+    float rFactors[N_BALLS];            // ball restitution factors
     ofVec2f gravity;                    // acceleration due to gravity
 };

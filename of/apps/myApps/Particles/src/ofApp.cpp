@@ -7,15 +7,20 @@ void ofApp::setup(){
     pMax.x = ofGetWidth() - BALL_RADIUS;
     pMax.y = ofGetHeight() - BALL_RADIUS;
 
-    // initialize ball positions and velocities to random values
+    // initialize ball positions, velocities, rFactors to random values
     const float MAX_SPEED = 500.f;
+    const float MIN_RFACTOR = 0.1f;
+    const float MAX_RFACTOR = 1.f;
     for (int i = 0; i < N_BALLS; i++) {
         p[i].x = pMin.x + ofRandomuf() * (pMax.x - pMin.x);
         p[i].y = pMin.y + ofRandomuf() * (pMax.y - pMin.y);
+
         float speed = ofRandomuf() * MAX_SPEED;
         float theta = ofRandomuf() * TWO_PI;
         v[i].x = speed * cosf(theta);
         v[i].y = speed * sinf(theta);
+
+        rFactors[i] = MIN_RFACTOR + ofRandomuf() * (MAX_RFACTOR - MIN_RFACTOR);
     }
 
     gravity = ofVec2f(0.f, 400.f);
@@ -81,7 +86,7 @@ void ofApp::update(){
     for (int i = 0; i < N_BALLS; i++) {
         float dtRemain = dt;
         do {
-            updatePosition(&p[i], &v[i], &dtRemain, 0.6f);
+            updatePosition(&p[i], &v[i], &dtRemain, rFactors[i]);
         } while (dtRemain > 0.f);
     }
 }
