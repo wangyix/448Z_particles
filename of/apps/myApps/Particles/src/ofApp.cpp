@@ -1,11 +1,15 @@
 #include "ofApp.h"
 
-//--------------------------------------------------------------
-void ofApp::setup(){
+void ofApp::updatePMinMax() {
     pMin.x = BALL_RADIUS;
     pMin.y = BALL_RADIUS;
     pMax.x = ofGetWidth() - BALL_RADIUS;
     pMax.y = ofGetHeight() - BALL_RADIUS;
+}
+
+//--------------------------------------------------------------
+void ofApp::setup(){
+    updatePMinMax();
 
     // initialize ball positions, velocities, rFactors to random values
     const float MAX_SPEED = 500.f;
@@ -75,6 +79,8 @@ void ofApp::updatePosition(ofVec2f* p, ofVec2f* v, float* dt, float rFactor) {
 
 //--------------------------------------------------------------
 void ofApp::update(){
+    updatePMinMax();
+
     float dt = ofGetLastFrameTime();
 
     // update ball velocities

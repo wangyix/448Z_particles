@@ -22,6 +22,7 @@ public:
 	void gotMessage(ofMessage msg);
 
 private:
+    void updatePMinMax();
     void updatePosition(ofVec2f* p, ofVec2f* v, float* dt, float rFactor);
 
 private:
