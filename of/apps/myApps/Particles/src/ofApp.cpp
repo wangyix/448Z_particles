@@ -18,7 +18,7 @@ void ofApp::setup(){
 
     // initialize ball positions, velocities, rFactors to random values
     const float MAX_SPEED = 500.f;
-    const float MIN_RFACTOR = 0.1f;
+    const float MIN_RFACTOR = 0.5f;
     const float MAX_RFACTOR = 1.f;
     for (int i = 0; i < N_BALLS; i++) {
         p[i].x = pMin.x + ofRandomuf() * (pMax.x - pMin.x);
@@ -101,6 +101,9 @@ void ofApp::update(){
     }
 
     // update ball positions; add a wav instance for each wall collision
+    WavInstance newWavInstances[MAX_WAV_INSTANCES];
+    int newWavCount = 0;
+
     const float VN_UNATTENUATED = 5000.f;
     for (int i = 0; i < N_BALLS; i++) {
         float dtRemain = dt;
@@ -110,18 +113,27 @@ void ofApp::update(){
             if (dtRemain > 0.f) {
                 // wall collision occurred; find out how many audio samples into this frame
                 // the collision occurred and record it its negative
-                float atten = std::min((vn - gravity.y) / (VN_UNATTENUATED - gravity.y), 0.1f);
+                float atten = std::min((vn - dt*gravity.y) / (VN_UNATTENUATED - dt*gravity.y), 0.1f);
                 if (atten > 0.f) {
                     int sampleAt = -(dt - dtRemain) * AUDIO_SAMPLE_RATE;
-                    wavInstancesLock.lock();
-                    wavInstances.push(WavInstance(sampleAt, atten));
-                    wavInstancesLock.unlock();
+                    newWavInstances[newWavCount++] = WavInstance(sampleAt, atten);
                 }
             } else {
                 break;
             }
         };
     }
+
+    // sort by sampleAt and record the new wav instances
+    std::sort(newWavInstances, &newWavInstances[newWavCount],
+        [](const WavInstance& a, const WavInstance& b) -> bool
+        {
+            return a.sampleAt > b.sampleAt;
+        });
+
+    wavInstancesLock.lock();
+    wavInstances.push(newWavInstances, newWavCount);
+    wavInstancesLock.unlock();
 }
 
 //--------------------------------------------------------------
@@ -147,14 +159,25 @@ void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
     auto end = wavInstances.end();
     for (auto wavIter = wavInstances.begin(); wavIter != end; ++wavIter) {
         WavInstance& wavInstance = *wavIter;
-        for (int i = 0; i < bufferSize; i++) {
-            if (wavInstance.sampleAt >= WAV_SAMPLES) {
-                instancesCompleted++;
-                break;
-            } else if (wavInstance.sampleAt >= 0) {
-                for (int j = 0; j < nChannels; j++) {
-                    output[i * nChannels + j] += wavInstance.atten * wav[wavInstance.sampleAt];
-                }
+        if (wavInstance.sampleAt <= -bufferSize) {
+            wavInstance.sampleAt += bufferSize;
+            continue;
+        }
+        int samplesToPush = bufferSize;
+        float* outputAt = output;
+        if (wavInstance.sampleAt < 0) {
+            samplesToPush += wavInstance.sampleAt;
+            outputAt -= wavInstance.sampleAt;
+            wavInstance.sampleAt = 0;
+        }
+        if (wavInstance.sampleAt + samplesToPush > WAV_SAMPLES) {
+            samplesToPush = WAV_SAMPLES - wavInstance.sampleAt;
+            instancesCompleted++;
+        }
+
+        for (int i = 0; i < samplesToPush; i++) {
+            for (int j = 0; j < nChannels; j++) {
+                *(outputAt++) += wavInstance.atten * wav[wavInstance.sampleAt];
             }
             wavInstance.sampleAt++;
         }
