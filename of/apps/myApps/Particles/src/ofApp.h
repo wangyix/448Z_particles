@@ -5,7 +5,7 @@
 #include "ofMain.h"
 #include "RingBuffer.h"
 
-#define N_BALLS 12
+#define N_BALLS 10
 #define BALL_RADIUS 10.0     // in pixels
 #define MAX_WAV_INSTANCES 64
 

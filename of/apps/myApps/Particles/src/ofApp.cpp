@@ -1,4 +1,5 @@
 #include "ofApp.h"
+#include <assert.h>
 
 #define AUDIO_SAMPLE_RATE 44100
 
@@ -19,7 +20,7 @@ void ofApp::setup(){
     // initialize ball positions, velocities, rFactors to random values
     const float MAX_SPEED = 500.f;
     const float MIN_RFACTOR = 0.5f;
-    const float MAX_RFACTOR = 1.f;
+    const float MAX_RFACTOR = 0.8f;
     for (int i = 0; i < N_BALLS; i++) {
         p[i].x = pMin.x + ofRandomuf() * (pMax.x - pMin.x);
         p[i].y = pMin.y + ofRandomuf() * (pMax.y - pMin.y);
@@ -42,26 +43,28 @@ void ofApp::setup(){
 
 float ofApp::updatePosition(ofVec2f* p, ofVec2f* v, float dt, float rFactor, float* vn) {
     ofVec2f pAfterDt = *p + dt * *v;
+    
+    // values if no collision occurs
     ofVec2f pNext = pAfterDt;
     ofVec2f vNext = *v;
+    *vn = 0.f;
 
+    // check each wall for a collision; update pNext, vNext to reflect closest collision
     float dtToProcess = dt;
     if (pAfterDt.x < pMin.x) {
         float dtX = (pMin.x - p->x) / v->x;     // time to left wall
         if (dtX < dtToProcess) {
             dtToProcess = dtX;
-            pNext.x = pMin.x;
-            pNext.y = p->y + dtX * v->y;
-            vNext.x *= -rFactor;
+            pNext = ofVec2f(pMin.x, p->y + dtX * v->y);
+            vNext = ofVec2f(-rFactor * v->x, v->y);
             *vn = -v->x;
         }
     } else if (pAfterDt.x > pMax.x) {
         float dtX = (pMax.x - p->x) / v->x;     // time to right wall
         if (dtX < dtToProcess) {
             dtToProcess = dtX;
-            pNext.x = pMax.x;
-            pNext.y = p->y + dtX * v->y;
-            vNext.x *= -rFactor;
+            pNext = ofVec2f(pMax.x, p->y + dtX * v->y);
+            vNext = ofVec2f(-rFactor * v->x, v->y);
             *vn = v->x;
         }
     }
@@ -69,21 +72,21 @@ float ofApp::updatePosition(ofVec2f* p, ofVec2f* v, float dt, float rFactor, flo
         float dtY = (pMin.y - p->y) / v->y;     // time to top wall
         if (dtY < dtToProcess) {
             dtToProcess = dtY;
-            pNext.y = pMin.y;
-            pNext.x = p->x + dtY * v->x;
-            vNext.y *= -rFactor;
+            pNext = ofVec2f(p->x + dtY * v->x, pMin.y);
+            vNext = ofVec2f(v->x, -rFactor * v->y);
             *vn = -v->y;
         }
     } else if (pAfterDt.y > pMax.y) {
         float dtY = (pMax.y - p->y) / v->y;     // time to bottom wall
         if (dtY < dtToProcess) {
             dtToProcess = dtY;
-            pNext.y = pMax.y;
-            pNext.x = p->x + dtY * v->x;
-            vNext.y *= -rFactor;
+            pNext = ofVec2f(p->x + dtY * v->x, pMax.y);
+            vNext = ofVec2f(v->x, -rFactor * v->y);
             *vn = v->y;
         }
     }
+    assert(dtToProcess >= 0.f && dtToProcess <= dt);
+    assert(*vn >= 0.f);
     *p = pNext;
     *v = vNext;
     return dtToProcess;
@@ -104,7 +107,8 @@ void ofApp::update(){
     WavInstance newWavInstances[MAX_WAV_INSTANCES];
     int newWavCount = 0;
 
-    const float VN_UNATTENUATED = 5000.f;
+    const float VN_UNATTENUATED = 1000.f;
+    float vn_threshold = 3.f * dt * gravity.y;
     for (int i = 0; i < N_BALLS; i++) {
         float dtRemain = dt;
         while (true) {
@@ -112,8 +116,9 @@ void ofApp::update(){
             dtRemain -= updatePosition(&p[i], &v[i], dtRemain, rFactors[i], &vn);
             if (dtRemain > 0.f) {
                 // wall collision occurred; find out how many audio samples into this frame
-                // the collision occurred and record it its negative
-                float atten = std::min((vn - dt*gravity.y) / (VN_UNATTENUATED - dt*gravity.y), 0.1f);
+                // the collision occurred and record its negative
+                float atten = (vn - vn_threshold) / (VN_UNATTENUATED - vn_threshold);
+                atten = std::min(atten, 1.f);
                 if (atten > 0.f) {
                     int sampleAt = -(dt - dtRemain) * AUDIO_SAMPLE_RATE;
                     newWavInstances[newWavCount++] = WavInstance(sampleAt, atten);
@@ -182,6 +187,8 @@ void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
             wavInstance.sampleAt++;
         }
     }
+    // since wavInstances is sorted, the instances that are done playing must be
+    // at the front (read location) of the circular buffer.
     if (instancesCompleted > 0) {
         wavInstancesLock.lock();
         wavInstances.pop(instancesCompleted);
