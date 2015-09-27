@@ -28,7 +28,8 @@ void ofApp::setup(){
     }
 
     gravity = ofVec2f(0.f, 400.f);
-
+    
+    ofSoundStreamSetup(2, 0, 44100, 256, 4);
     ofSetFrameRate(60);
 }
 
@@ -109,6 +110,13 @@ void ofApp::draw(){
     }
 
     ofDrawBitmapString(ofToString(ofGetFrameRate()) + "fps", 10, 15);
+}
+
+//--------------------------------------------------------------
+void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
+    for (int i = 0; i < bufferSize; i++) {
+        //output[nChannels*i] = cosf()
+    }
 }
 
 //--------------------------------------------------------------
