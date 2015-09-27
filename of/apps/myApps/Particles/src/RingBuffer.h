@@ -43,6 +43,12 @@ public:
         T& operator[](int d) const {
             return *(*this + d);
         }
+        bool operator==(const Iterator& iter) {
+            return ((values + index) == (iter.values + iter.index));
+        }
+        bool operator!=(const Iterator& iter) {
+            return !(*this == iter);
+        }
     private:
         T* values;
         size_t n;
@@ -53,10 +59,7 @@ public:
     RingBuffer() : rIndex(0), wIndex(0) {}
 
     size_t push(const T* buffer, size_t n) {
-        size_t spaceRemaining = capacityRemaining();
-        if (n > spaceRemaining) {
-            n = spaceRemaining;
-        }
+        n = std::min(n, capacityRemaining());
         size_t toEnd = N + 1 - wIndex;
         size_t n1 = std::min(toEnd, n);
         memcpy(&values[wIndex], buffer, n1 * sizeof(T));
@@ -64,16 +67,36 @@ public:
         wIndex = (wIndex + n) % (N + 1);
         return n;
     }
-
-    size_t pop(T* buffer, size_t n) {
-        size_t elements = size();
-        if (n > elements) {
-            n = elements;
+    size_t push(const T& value, size_t n) {
+        n = std::min(n, capacityRemaining());
+        for (int i = 0; i < n; i++) {
+            values[wIndex] = value;
+            wIndex = (wIndex + 1) % (N + 1);
         }
+    }
+    size_t push(const T& value) {
+        if (capacityRemaining() == 0) {
+            return 0;
+        }
+        values[wIndex] = value;
+        wIndex = (wIndex + 1) % (N + 1);
+        return 1;
+    }
+    size_t peek(T* buffer, size_t n) const {
+        n = std::min(n, size());
         size_t toEnd = N + 1 - rIndex;
         size_t n1 = std::min(toEnd, n);
         memcpy(buffer, &values[rIndex], n1 * sizeof(T));
         memcpy(buffer + n1, values, (n - n1) * sizeof(T));
+        return n;
+    }
+    size_t pop(T* buffer, size_t n) {
+        n = peek(buffer, n);
+        rIndex = (rIndex + n) % (N + 1);
+        return n;
+    }
+    size_t pop(size_t n) {
+        n = std::min(n, size());
         rIndex = (rIndex + n) % (N + 1);
         return n;
     }
@@ -81,17 +104,19 @@ public:
     size_t size() const {
         return (N + 1 + wIndex - rIndex) % (N + 1);
     }
-
     size_t capacityRemaining() const {
         return (N + rIndex - wIndex) % (N + 1);
     }
 
-    Iterator front() const {
+    Iterator begin() {
         return Iterator(values, N, rIndex);
     }
-
-    Iterator back() const {
+    Iterator end() {
         return Iterator(values, N, wIndex);
+    }
+
+    size_t capacity() const {
+        return N;
     }
 private:
     T values[N + 1];

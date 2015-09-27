@@ -1,10 +1,19 @@
 #pragma once
 
+#include <mutex>
+
 #include "ofMain.h"
 #include "RingBuffer.h"
 
 #define N_BALLS 10
 #define BALL_RADIUS 10.0     // in pixels
+
+struct WavInstance {
+    WavInstance() : sampleAt(0), atten(0.f) {}
+    WavInstance(int sampleAt, float atten) : sampleAt(sampleAt), atten(atten) {}
+    int sampleAt;
+    float atten;
+};
 
 class ofApp : public ofBaseApp{
 public:
@@ -26,7 +35,7 @@ public:
 
 private:
     void updatePMinMax();
-    void updatePosition(ofVec2f* p, ofVec2f* v, float* dt, float rFactor);
+    float updatePosition(ofVec2f* p, ofVec2f* v, float dt, float rFactor, float* vn);
 
 private:
     ofVec2f pMin, pMax;                 // bounds on ball position
@@ -35,5 +44,7 @@ private:
     float rFactors[N_BALLS];            // ball restitution factors
     ofVec2f gravity;                    // acceleration due to gravity
 
-    RingBuffer<float, 1024> audioSamples;
+    //RingBuffer<float, 1470> audioBuffer;      // 44100/60 * 2 channels, so a frame's worth of samples
+    RingBuffer<WavInstance, 64> wavInstances;   // each entry is the sample index that wav instance is currently being played at
+    std::mutex wavInstancesLock;
 };
