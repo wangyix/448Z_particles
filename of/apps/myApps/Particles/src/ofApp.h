@@ -14,6 +14,8 @@
 
 #define GRAVITY_MAG 400.0
 
+#define MOUSE_CURSOR_MASS 200000.0    // how attractive the cursor is when held down; unit is abitrary
+
 struct WavInstance {
     WavInstance() : sampleAt(0), atten(0.f) {}
     WavInstance(int sampleAt, float atten) : sampleAt(sampleAt), atten(atten) {}
@@ -50,6 +52,9 @@ private:
     float rFactors[N_BALLS];            // ball restitution factors
 
     ofVec2f gravity;                    // acceleration due to gravity
+    
+    bool mouseAttract;
+    ofVec2f mousePos;
 
     // each entry is the sample index that wav instance is currently being played at
     RingBuffer<WavInstance, MAX_WAV_INSTANCES> wavInstances;

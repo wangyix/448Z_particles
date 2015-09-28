@@ -33,7 +33,7 @@ void ofApp::setup(){
 
     gravity = ofVec2f(0.f, GRAVITY_MAG);
 
-    //audioBuffer.push(0.f, audioBuffer.capacity());  // initially fill up buffer to full;
+    mouseAttract = false;
     
     ofSoundStreamSetup(2, 0, AUDIO_SAMPLE_RATE, 256, 4);
     ofSetFrameRate(60);
@@ -99,6 +99,14 @@ void ofApp::update(){
     // update ball velocities
     for (int i = 0; i < N_BALLS; i++) {
         v[i] += dt * gravity;
+    }
+    if (mouseAttract) {
+        for (int i = 0; i < N_BALLS; i++) {
+            ofVec2f toMouse = mousePos - p[i];
+            float dSq = toMouse.lengthSquared();
+            ofVec2f accel = (MOUSE_CURSOR_MASS / dSq) * toMouse;    // falls off as R
+            v[i] += dt * accel;
+        }
     }
 
     // update ball positions; add a wav instance for each wall collision
@@ -226,17 +234,18 @@ void ofApp::mouseMoved(int x, int y ){
 
 //--------------------------------------------------------------
 void ofApp::mouseDragged(int x, int y, int button){
-
+    mousePos = ofVec2f(x, y);
 }
 
 //--------------------------------------------------------------
 void ofApp::mousePressed(int x, int y, int button){
-
+    mouseAttract = true;
+    mousePos = ofVec2f(x, y);
 }
 
 //--------------------------------------------------------------
 void ofApp::mouseReleased(int x, int y, int button){
-
+    mouseAttract = false;
 }
 
 //--------------------------------------------------------------
