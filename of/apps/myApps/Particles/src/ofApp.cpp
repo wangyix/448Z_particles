@@ -32,14 +32,13 @@ void ofApp::setup(){
     }
 
     gravity = ofVec2f(0.f, GRAVITY_MAG);
-
     mouseAttract = false;
     
     ofSoundStreamSetup(2, 0, AUDIO_SAMPLE_RATE, 256, 4);
     ofSetFrameRate(60);
 }
 
-float ofApp::updatePosition(ofVec2f* p, ofVec2f* v, float dt, float rFactor, float* vn) {
+float ofApp::updatePositionUntilCollision(ofVec2f* p, ofVec2f* v, float dt, float rFactor, float* vn) {
     ofVec2f pAfterDt = *p + dt * *v;
     
     // values if no collision occurs
@@ -119,10 +118,10 @@ void ofApp::update(){
         float dtRemain = dt;
         while (true) {
             float vn = 0.f;
-            dtRemain -= updatePosition(&p[i], &v[i], dtRemain, rFactors[i], &vn);
+            dtRemain -= updatePositionUntilCollision(&p[i], &v[i], dtRemain, rFactors[i], &vn);
             if (dtRemain > 0.f) {
                 // wall collision occurred; find out how many audio samples into this frame
-                // the collision occurred and record its negative
+                // the collision occurred and use that as its delay.
                 float atten = (vn - vn_threshold) / (VN_UNATTENUATED - vn_threshold);
                 atten = std::min(atten, 1.f);
                 if (atten > 0.f) {
