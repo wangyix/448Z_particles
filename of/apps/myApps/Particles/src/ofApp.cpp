@@ -17,7 +17,7 @@ void ofApp::setup(){
 
     // initialize ball positions, velocities, rFactors to random values
     const float MAX_SPEED = 500.f;
-    const float MIN_RFACTOR = 0.5f;
+    const float MIN_RFACTOR = 0.3f;
     const float MAX_RFACTOR = 0.8f;
     for (int i = 0; i < N_BALLS; i++) {
         p[i].x = pMin.x + ofRandomuf() * (pMax.x - pMin.x);
