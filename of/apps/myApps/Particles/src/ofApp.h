@@ -9,6 +9,11 @@
 #define BALL_RADIUS 10.0     // in pixels
 #define MAX_WAV_INSTANCES 64
 
+#define AUDIO_SAMPLE_RATE 44100
+#define WAV_SAMPLES 4876
+
+#define GRAVITY_MAG 400.0
+
 struct WavInstance {
     WavInstance() : sampleAt(0), atten(0.f) {}
     WavInstance(int sampleAt, float atten) : sampleAt(sampleAt), atten(atten) {}
@@ -43,6 +48,7 @@ private:
     ofVec2f p[N_BALLS];                 // ball positions
     ofVec2f v[N_BALLS];                 // ball velocities
     float rFactors[N_BALLS];            // ball restitution factors
+
     ofVec2f gravity;                    // acceleration due to gravity
 
     // each entry is the sample index that wav instance is currently being played at
