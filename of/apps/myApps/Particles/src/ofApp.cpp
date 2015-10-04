@@ -9,6 +9,12 @@ static const float wav[WAV_SAMPLES] = { 0.000397, 0.002014, 0.006073, 0.011749, 
 void ofApp::setup(){
     windowResized(ofGetWidth(), ofGetHeight());
 
+    // initialize light
+    ofSetSmoothLighting(true);
+    pointLight.setDiffuseColor(ofFloatColor(.85, .85, .55));
+    pointLight.setSpecularColor(ofFloatColor(1.f, 1.f, 1.f));
+
+
     // initialize ball positions, velocities, rFactors to random values
     const float MAX_SPEED = 500.f;
     const float MIN_RFACTOR = 0.3f;
@@ -97,7 +103,7 @@ float ofApp::updatePositionUntilCollision(ofVec3f* p, ofVec3f* v, float dt, floa
             *vn = v->z;
         }
     }
-    assert(dtToProcess >= 0.f && dtToProcess <= dt);
+    assert(dtToProcess >= 0.f && dtToProcess <= dt);    // may trip when resizing window
     assert(*vn >= 0.f);
     *p = pNext;
     *v = vNext;
@@ -162,10 +168,21 @@ void ofApp::update(){
 //--------------------------------------------------------------
 void ofApp::draw(){
     ofBackground(0);
-    ofSetColor(255, 0, 0);
-    ofFill();
+
+    ofEnableLighting();
+    pointLight.enable();
+
+    ofEnableDepthTest();
+    
+    ofSetColor(128, 128, 128);
+    leftWall.draw();
+    rightWall.draw();
+    backWall.draw();
+    topWall.draw();
+    bottomWall.draw();
 
     // draw balls
+    ofSetColor(0, 255, 0);
     ofIcoSpherePrimitive sphere(BALL_RADIUS, 1);
     for (int i = 0; i < N_BALLS; i++) {
         //ofCircle(p[i], BALL_RADIUS);
@@ -273,6 +290,28 @@ void ofApp::windowResized(int w, int h){
     pMax.y = h - BALL_RADIUS;
     pMin.z = BOX_ZMIN + BALL_RADIUS;
     pMax.z = BOX_ZMAX - BALL_RADIUS;
+
+
+    pointLight.setPosition(w / 2, 10.f, 0.5f*(BOX_ZMIN + BOX_ZMAX));
+
+    // initialize walls
+
+    leftWall = ofPlanePrimitive(BOX_ZMAX - BOX_ZMIN, h, 8, 8);
+    rightWall = leftWall;
+    leftWall.setPosition(0.f, h / 2, 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    leftWall.rotate(90.f, 0.f, 1.f, 0.f);
+    rightWall.setPosition(w, h / 2, 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    rightWall.rotate(-90.f, 0.f, 1.f, 0.f);
+
+    backWall = ofPlanePrimitive(w, h, 8, 8);
+    backWall.setPosition(w / 2, h / 2, BOX_ZMIN);
+
+    topWall = ofPlanePrimitive(w, BOX_ZMAX - BOX_ZMIN, 8, 8);
+    bottomWall = topWall;
+    topWall.setPosition(w / 2, 0.f, 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    topWall.rotate(-90.f, 1.f, 0.f, 0.f);
+    bottomWall.setPosition(w / 2, h, 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    bottomWall.rotate(90.f, 1.f, 0.f, 0.f);
 }
 
 //--------------------------------------------------------------

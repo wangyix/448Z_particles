@@ -54,6 +54,9 @@ private:
     float updatePositionUntilCollision(ofVec3f* p, ofVec3f* v, float dt, float rFactor, float* vn);
 
 private:
+    ofLight pointLight;
+    ofPlanePrimitive leftWall, rightWall, bottomWall, topWall, backWall;
+
     ofVec3f pMin, pMax;                 // bounds on ball position
     ofVec3f p[N_BALLS];                 // ball positions
     ofVec3f v[N_BALLS];                 // ball velocities
