@@ -9,10 +9,13 @@
 #define BALL_RADIUS 10.0     // in pixels
 #define MAX_WAV_INSTANCES 64
 
-#define AUDIO_SAMPLE_RATE 44100
-#define WAV_SAMPLES 4876
+#define BOX_ZMIN -400.0
+#define BOX_ZMAX 0.0
 
 #define GRAVITY_MAG 400.0
+
+#define AUDIO_SAMPLE_RATE 44100
+#define WAV_SAMPLES 4876
 
 #define MOUSE_CURSOR_MASS 200000.0    // how attractive the cursor is when held down; unit is abitrary
 
@@ -42,26 +45,24 @@ public:
     void audioOut(float* output, int bufferSize, int nChannels) override;
 
 private:
-    void updatePMinMax();
-
     // Will update a ball's position.  If no collision occurs within dt, the ball will simply move
     // to p + dt * v, and the function will return dt. If a collision occurs within dt, the ball
     // will move to the position where the collision occurs, v will be updated to reflect the
     // collision, and the function will return the time until the collision.
     // rFactor is the restitution factor of the ball; vn will be filled with the normal velocity
     // at which the collision occurred if one occurs.
-    float updatePositionUntilCollision(ofVec2f* p, ofVec2f* v, float dt, float rFactor, float* vn);
+    float updatePositionUntilCollision(ofVec3f* p, ofVec3f* v, float dt, float rFactor, float* vn);
 
 private:
-    ofVec2f pMin, pMax;                 // bounds on ball position
-    ofVec2f p[N_BALLS];                 // ball positions
-    ofVec2f v[N_BALLS];                 // ball velocities
+    ofVec3f pMin, pMax;                 // bounds on ball position
+    ofVec3f p[N_BALLS];                 // ball positions
+    ofVec3f v[N_BALLS];                 // ball velocities
     float rFactors[N_BALLS];            // ball restitution factors
 
-    ofVec2f gravity;                    // acceleration due to gravity
+    ofVec3f gravity;                    // acceleration due to gravity
     
-    bool mouseAttract;
-    ofVec2f mousePos;
+    bool attract;
+    ofVec3f attractPos;
 
     // Each entry is the sample index that wav instance is currently being played at.  A negative
     // value indicates a delay before that instance begins playing.
