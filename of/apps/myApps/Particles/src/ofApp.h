@@ -17,6 +17,8 @@
 #define AUDIO_SAMPLE_RATE 44100
 #define WAV_SAMPLES 4876
 
+#define NUM_MATERIALS 4
+
 #define MOUSE_CURSOR_MASS 200000.0    // how attractive the cursor is when held down; unit is abitrary
 
 struct WavInstance {
@@ -24,6 +26,23 @@ struct WavInstance {
     WavInstance(int sampleAt, float atten) : sampleAt(sampleAt), atten(atten) {}
     int sampleAt;
     float atten;
+};
+
+struct Sphere {
+    ofVec3f p;
+    ofVec3f v;
+    float rFactor;
+    float m;
+    float yMod;
+    float pRatio;
+
+    ofColor color;
+};
+
+struct Collision {
+    Collision() {}
+    int id;
+    float t;
 };
 
 class ofApp : public ofBaseApp{
@@ -47,15 +66,14 @@ public:
 
 private:
     int wallCollide(const ofVec3f& c1, float r1, const ofVec3f& v1, float tMin, float* t);
+    void updateBallCollisions(int index, float tMin);
 
 private:
     ofLight pointLight;
     ofPlanePrimitive leftWall, rightWall, bottomWall, topWall, backWall;
 
     ofVec3f pMin, pMax;                 // bounds on ball position
-    ofVec3f p[N_BALLS];                 // ball positions
-    ofVec3f v[N_BALLS];                 // ball velocities
-    float rFactors[N_BALLS];            // ball restitution factors
+    Sphere balls[N_BALLS];
 
     ofVec3f gravity;                    // acceleration due to gravity
     
@@ -63,6 +81,7 @@ private:
     ofVec3f attractPos;
 
     float* ballCollisionTable;
+    Collision wallCollisionTable[N_BALLS];
 
     // Each entry is the sample index that wav instance is currently being played at.  A negative
     // value indicates a delay before that instance begins playing.
