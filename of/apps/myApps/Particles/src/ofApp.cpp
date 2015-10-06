@@ -19,7 +19,7 @@ void ofApp::setup(){
     // initialize ball positions, velocities, rFactors to random values
     const float MAX_SPEED = 500.f;
     const float MIN_RFACTOR = 0.3f;
-    const float MAX_RFACTOR = 0.8f;
+    const float MAX_RFACTOR = 0.9f;
     for (int i = 0; i < N_BALLS; i++) {
         p[i].x = pMin.x + ofRandomuf() * (pMax.x - pMin.x);
         p[i].y = pMin.y + ofRandomuf() * (pMax.y - pMin.y);
@@ -39,83 +39,118 @@ void ofApp::setup(){
     gravity = ofVec3f(0.f, GRAVITY_MAG, 0.f);
     attract = false;
     
+    ballCollisionTable = new float[N_BALLS * N_BALLS];
+
     ofSoundStreamSetup(2, 0, AUDIO_SAMPLE_RATE, 256, 4);
     ofSetFrameRate(60);
 }
 
-float ofApp::updatePositionUntilCollision(ofVec3f* p, ofVec3f* v, float dt, float rFactor, float* vn) {
-    ofVec3f pAfterDt = *p + dt * *v;
-    
-    // values if no collision occurs
-    ofVec3f pNext = pAfterDt;
-    ofVec3f vNext = *v;
-    *vn = 0.f;
-
-    // check each wall for a collision; update pNext, vNext to reflect closest collision
-    float dtToProcess = dt;
-    if (pAfterDt.x < pMin.x) {
-        float dtX = (pMin.x - p->x) / v->x;     // time to left wall
-        if (dtX < dtToProcess) {
-            dtToProcess = dtX;
-            pNext = ofVec3f(pMin.x, p->y + dtX * v->y, p->z + dtX * v->z);
-            vNext = ofVec3f(-rFactor * v->x, v->y, v->z);
-            *vn = -v->x;
-        }
-    } else if (pAfterDt.x > pMax.x) {
-        float dtX = (pMax.x - p->x) / v->x;     // time to right wall
-        if (dtX < dtToProcess) {
-            dtToProcess = dtX;
-            pNext = ofVec3f(pMax.x, p->y + dtX * v->y, p->z + dtX * v->z);
-            vNext = ofVec3f(-rFactor * v->x, v->y, v->z);
-            *vn = v->x;
-        }
-    }
-    if (pAfterDt.y < pMin.y) {
-        float dtY = (pMin.y - p->y) / v->y;     // time to top wall
-        if (dtY < dtToProcess) {
-            dtToProcess = dtY;
-            pNext = ofVec3f(p->x + dtY * v->x, pMin.y, p->z + dtY * v->z);
-            vNext = ofVec3f(v->x, -rFactor * v->y, v->z);
-            *vn = -v->y;
-        }
-    } else if (pAfterDt.y > pMax.y) {
-        float dtY = (pMax.y - p->y) / v->y;     // time to bottom wall
-        if (dtY < dtToProcess) {
-            dtToProcess = dtY;
-            pNext = ofVec3f(p->x + dtY * v->x, pMax.y, p->z + dtY * v->z);
-            vNext = ofVec3f(v->x, -rFactor * v->y, v->z);
-            *vn = v->y;
-        }
-    }
-    if (pAfterDt.z < pMin.z) {
-        float dtZ = (pMin.z - p->z) / v->z;     // time to top wall
-        if (dtZ < dtToProcess) {
-            dtToProcess = dtZ;
-            pNext = ofVec3f(p->x + dtZ * v->x, p->y + dtZ * v->y, pMin.z);
-            vNext = ofVec3f(v->x, v->y, -rFactor * v->z);
-            *vn = -v->z;
-        }
-    } else if (pAfterDt.z > pMax.z) {
-        float dtZ = (pMax.z - p->z) / v->z;     // time to bottom wall
-        if (dtZ < dtToProcess) {
-            dtToProcess = dtZ;
-            pNext = ofVec3f(p->x + dtZ * v->x, p->y + dtZ * v->y, pMax.z);
-            vNext = ofVec3f(v->x, v->y, -rFactor * v->z);
-            *vn = v->z;
-        }
-    }
-    assert(dtToProcess >= 0.f && dtToProcess <= dt);    // may trip when resizing window
-    assert(*vn >= 0.f);
-    *p = pNext;
-    *v = vNext;
-    return dtToProcess;
+void ofApp::exit() {
+    delete[] ballCollisionTable;
 }
+
+
+enum WallId{ NONE = -1, XMIN = -2, XMAX = -3, YMIN = -4, YMAX = -5, ZMIN = -6, ZMAX = -7 };
+
+
+// will return smaller root
+static bool spheresCollide(const ofVec3f& c1, float r1, const ofVec3f& v1,
+                           const ofVec3f& c2, float r2, const ofVec3f& v2,
+                           float* t) {
+    ofVec3f cDiff = c1 - c2;
+    ofVec3f vDiff = v1 - v2;
+    float rSum = r1 + r2;
+    float a = vDiff.lengthSquared();
+    float b_over_2 = cDiff.dot(vDiff);
+    float c = cDiff.lengthSquared() - rSum*rSum;
+    float discr_over_4 = b_over_2*b_over_2 - a*c;
+    if (discr_over_4 < 0.f) {
+        return false;
+    }
+    *t = (-b_over_2 - sqrtf(discr_over_4)) / a;    // smaller root
+    return true;
+}
+
+// will update t to time of first wall collision, and update wallId to that wall
+int ofApp::wallCollide(const ofVec3f& c1, float r1, const ofVec3f& v1, float tMin, float* t) {
+    *t = positiveInfinity;
+    int id = NONE;
+    if (v1.x > 0.f) {
+        //assert(c1.x <= pMax.x);
+        float tx = (pMax.x - c1.x) / v1.x;
+        if (tx >= tMin && tx < *t) {
+            *t = tx;
+            id = XMAX;
+        }
+    } else {
+        //assert(c1.x >= pMin.x);
+        float tx = (pMin.x - c1.x) / v1.x;
+        if (tx >= tMin && tx < *t) {
+            *t = tx;
+            id = XMIN;
+        }
+    }
+    if (v1.y > 0.f) {
+        //assert(c1.y <= pMax.y);
+        float ty = (pMax.y - c1.y) / v1.y;
+        if (ty >= tMin && ty < *t) {
+            *t = ty;
+            id = YMAX;
+        }
+    } else {
+        //assert(c1.y >= pMin.y);
+        float ty = (pMin.y - c1.y) / v1.y;
+        if (ty >= tMin && ty < *t) {
+            *t = ty;
+            id = YMIN;
+        }
+    }
+    if (v1.z > 0.f) {
+        //assert(c1.z <= pMax.z);
+        float tz = (pMax.z - c1.z) / v1.z;
+        if (tz >= tMin && tz < *t) {
+            *t = tz;
+            id = ZMAX;
+        }
+    } else {
+        //assert(c1.z >= pMin.z);             // will be triggered by the backstepping
+        float tz = (pMin.z - c1.z) / v1.z;
+        if (tz >= tMin && tz < *t) {
+            *t = tz;
+            id = ZMIN;
+        }
+    }
+    return id;
+}
+
+/*struct Aabb {
+    Aabb() {}
+    Aabb(const ofVec3f& min, const ofVec3f& max) : min(min), max(max) {}
+    Aabb(float xmin, float xmax, float ymin, float ymax, float zmin, float zmax)
+        : min(xmin, ymin, zmin), max(xmax, ymax, zmax) {}
+    bool intersect(const Aabb& b) const {
+        assert(min.x <= max.x && min.y <= max.y && min.z <= max.z);
+        assert(b.min.x <= b.max.x && b.min.y <= b.max.y && b.min.z <= b.max.z);
+        return (min.x < b.max.x && max.x > b.min.x
+            && min.y < b.max.y && max.y > b.min.y
+            && min.z < b.max.z && max.z > b.min.z);
+    }
+    ofVec3f min, max;
+};*/
+
+
+struct Collision {
+    Collision() {}
+    int id;
+    float t;
+};
+
 
 //--------------------------------------------------------------
 void ofApp::update(){
     float dt = ofGetLastFrameTime();
-
-    // update ball velocities
+    
+    // update ball velocities with gravity and attractive force
     for (int i = 0; i < N_BALLS; i++) {
         v[i] += dt * gravity;
     }
@@ -128,42 +163,165 @@ void ofApp::update(){
         }
     }
 
-    // update ball positions; add a wav instance for each wall collision
     WavInstance newWavInstances[MAX_WAV_INSTANCES];
     int newWavCount = 0;
+    const float vn_unattenuated = dt * 60000.f;
+    const float vn_threshold = 3.f * dt * GRAVITY_MAG;
 
-    const float VN_UNATTENUATED = 1000.f;
-    float vn_threshold = 3.f * dt * GRAVITY_MAG;
+    Collision wallCollisionTable[N_BALLS];
+
+    // compute collision times between all object pairs
     for (int i = 0; i < N_BALLS; i++) {
-        float dtRemain = dt;
-        while (true) {
-            float vn = 0.f;
-            dtRemain -= updatePositionUntilCollision(&p[i], &v[i], dtRemain, rFactors[i], &vn);
-            if (dtRemain > 0.f) {
-                // wall collision occurred; find out how many audio samples into this frame
-                // the collision occurred and use that as its delay.
-                float atten = (vn - vn_threshold) / (VN_UNATTENUATED - vn_threshold);
-                atten = std::min(atten, 1.f);
-                if (atten > 0.f) {
-                    int sampleAt = -(dt - dtRemain) * AUDIO_SAMPLE_RATE;
-                    newWavInstances[newWavCount++] = WavInstance(sampleAt, atten);
+        wallCollisionTable[i].id = wallCollide(p[i], BALL_RADIUS, v[i], 0.f, &wallCollisionTable[i].t);
+        for (int j = i + 1; j < N_BALLS; j++) {
+            float t = -1.f;
+            spheresCollide(p[i], BALL_RADIUS, v[i], p[j], BALL_RADIUS, v[j], &t);
+            ballCollisionTable[i * N_BALLS + j] = t;
+            //ballCollisionTable[j * N_BALLS + i] = t;
+        }
+    }
+
+    float tAt = 0.f;
+    while (true) {
+        // find the ball with the nearest next collision (occurs after tAt)
+        int ci = -1;
+        Collision collision;
+        collision.t = positiveInfinity;
+        collision.id = NONE;
+        for (int i = 0; i < N_BALLS; i++) {
+            if (wallCollisionTable[i].t >= tAt && wallCollisionTable[i].t < collision.t) {
+                ci = i;
+                collision = wallCollisionTable[i];
+            }
+            for (int j = i + 1; j < N_BALLS; j++) {
+                if (ballCollisionTable[i * N_BALLS + j] >= tAt && ballCollisionTable[i * N_BALLS + j] < collision.t) {
+                    ci = i;
+                    collision.t = ballCollisionTable[i * N_BALLS + j];
+                    collision.id = j;
                 }
-            } else {
+            }
+        }
+        if (collision.t >= dt) {
+            break;
+        }
+        assert(collision.t >= tAt);
+        assert(collision.id != NONE);
+
+        float vn;
+
+        if (collision.id < -1) {            // wall collision
+            ofVec3f vNext = v[ci];
+            switch (collision.id) {
+            case XMIN:
+            case XMAX:
+                vNext.x *= -rFactors[ci];
+                vn = abs(v[ci].x);
+                break;
+            case YMIN:
+            case YMAX:
+                vNext.y *= -rFactors[ci];
+                vn = abs(v[ci].y);
+                break;
+            case ZMIN:
+            case ZMAX:
+                vNext.z *= -rFactors[ci];
+                vn = abs(v[ci].z);
                 break;
             }
-        };
+            p[ci] += collision.t * (v[ci] - vNext); // move it to contact point, then backstep in time
+            v[ci] = vNext;
+
+            // update collision tables
+            wallCollisionTable[ci].id = wallCollide(p[ci], BALL_RADIUS, v[ci], collision.t, &wallCollisionTable[ci].t);
+            for (int i = 0; i < ci; i++) {
+                float t = -1.f;
+                spheresCollide(p[ci], BALL_RADIUS, v[ci], p[i], BALL_RADIUS, v[i], &t);
+                ballCollisionTable[i * N_BALLS + ci] = t;
+            }
+            for (int j = ci + 1; j < N_BALLS; j++) {
+                float t = -1.f;
+                spheresCollide(p[ci], BALL_RADIUS, v[ci], p[j], BALL_RADIUS, v[j], &t);
+                ballCollisionTable[ci * N_BALLS + j] = t;
+            }
+        } else {    //if (collision.id >= 0) {     // ball collision
+            assert(ci != collision.id);
+
+            const float m1 = 1.f;   // placeholders for ball masses
+            const float m2 = 1.f;
+
+            int ci2 = collision.id;
+            ofVec3f p1 = p[ci] + collision.t * v[ci];
+            ofVec3f p2 = p[ci2] + collision.t * v[ci2];
+            
+            ofVec3f n = (p1 - p2).normalized();
+            
+            float a1 = v[ci].dot(n);
+            float a2 = v[ci2].dot(n);
+            vn = abs(a1 - a2);
+            
+            float optimizedP = (2.f * (a1 - a2)) / (m1 + m2);
+
+            ofVec3f vNext = v[ci] - optimizedP * m2 * n;
+            ofVec3f vNext2 = v[ci2] + optimizedP * m1 * n;
+
+            p[ci] += collision.t * (v[ci] - vNext);     // move to contact pt, then backstep
+            p[ci2] += collision.t * (v[ci2] - vNext2);
+            v[ci] = vNext;
+            v[ci2] = vNext2;
+
+            // update collision tables
+            wallCollisionTable[ci].id = wallCollide(p[ci], BALL_RADIUS, v[ci], collision.t, &wallCollisionTable[ci].t);
+            for (int i = 0; i < ci; i++) {
+                float t = -1.f;
+                spheresCollide(p[ci], BALL_RADIUS, v[ci], p[i], BALL_RADIUS, v[i], &t);
+                ballCollisionTable[i * N_BALLS + ci] = t;
+            }
+            for (int j = ci + 1; j < N_BALLS; j++) {
+                float t = -1.f;
+                spheresCollide(p[ci], BALL_RADIUS, v[ci], p[j], BALL_RADIUS, v[j], &t);
+                ballCollisionTable[ci * N_BALLS + j] = t;
+            }
+            wallCollisionTable[ci2].id = wallCollide(p[ci2], BALL_RADIUS, v[ci2], collision.t, &wallCollisionTable[ci2].t);
+            for (int i = 0; i < ci2; i++) {
+                float t = -1.f;
+                spheresCollide(p[ci2], BALL_RADIUS, v[ci2], p[i], BALL_RADIUS, v[i], &t);
+                ballCollisionTable[i * N_BALLS + ci2] = t;
+            }
+            for (int j = ci2 + 1; j < N_BALLS; j++) {
+                float t = -1.f;
+                spheresCollide(p[ci2], BALL_RADIUS, v[ci2], p[j], BALL_RADIUS, v[j], &t);
+                ballCollisionTable[ci2 * N_BALLS + j] = t;
+            }
+        }
+
+        // add new wav instance for collision sound
+        float atten = (vn - vn_threshold) / (vn_unattenuated - vn_threshold);
+        atten = min(atten, 1.f);
+        if (atten > 0.f) {
+            int sampleAt = (collision.t - dt) * AUDIO_SAMPLE_RATE;
+            newWavInstances[newWavCount++] = WavInstance(sampleAt, atten);
+        }
+        tAt = collision.t;
+    }
+
+
+    // update all ball positions to end of frame
+    for (int i = 0; i < N_BALLS; i++) {
+        p[i] += dt * v[i];
     }
 
     // sort by sampleAt and record the new wav instances
-    std::sort(newWavInstances, &newWavInstances[newWavCount],
-        [](const WavInstance& a, const WavInstance& b) -> bool
+    if (newWavCount > 0) {
+        std::sort(newWavInstances, &newWavInstances[newWavCount],
+                  [](const WavInstance& a, const WavInstance& b) -> bool
         {
             return a.sampleAt > b.sampleAt;
         });
 
-    wavInstancesLock.lock();
-    wavInstances.push(newWavInstances, newWavCount);
-    wavInstancesLock.unlock();
+        wavInstancesLock.lock();
+        wavInstances.push(newWavInstances, newWavCount);
+        wavInstancesLock.unlock();
+    }
 }
 
 //--------------------------------------------------------------
