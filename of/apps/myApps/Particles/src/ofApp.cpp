@@ -272,7 +272,7 @@ void ofApp::update(){
         // add new wav instance for collision sound
         float atten = (vn - vn_threshold) / (vn_unattenuated - vn_threshold);
         atten = min(atten, 1.f);
-        if (atten > 0.f) {
+        if (atten > 0.f && newWavCount < MAX_WAV_INSTANCES) {
             int sampleAt = (collision.t - dt) * AUDIO_SAMPLE_RATE;
             newWavInstances[newWavCount++] = WavInstance(sampleAt, atten);
         }
@@ -343,7 +343,7 @@ void ofApp::draw(){
 //--------------------------------------------------------------
 void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
     memset(output, 0, nChannels * bufferSize * sizeof(float));
-
+    
     // for each wav instance, add samples to audio buffer and advance sample offset
     int instancesCompleted = 0;
     auto end = wavInstances.end();

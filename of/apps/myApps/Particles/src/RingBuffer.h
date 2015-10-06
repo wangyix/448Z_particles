@@ -63,36 +63,16 @@ public:
         size_t toEnd = N + 1 - wIndex;
         size_t n1 = std::min(toEnd, n);
         memcpy(&values[wIndex], buffer, n1 * sizeof(T));
-        memcpy(values, buffer + n1, (n - n1) * sizeof(T));
+        memcpy(&values[0], buffer + n1, (n - n1) * sizeof(T));
         wIndex = (wIndex + n) % (N + 1);
         return n;
-    }
-    size_t push(const T& value, size_t n) {
-        n = std::min(n, capacityRemaining());
-        for (int i = 0; i < n; i++) {
-            values[wIndex] = value;
-            wIndex = (wIndex + 1) % (N + 1);
-        }
-    }
-    size_t push(const T& value) {
-        if (capacityRemaining() == 0) {
-            return 0;
-        }
-        values[wIndex] = value;
-        wIndex = (wIndex + 1) % (N + 1);
-        return 1;
     }
     size_t peek(T* buffer, size_t n) const {
         n = std::min(n, size());
         size_t toEnd = N + 1 - rIndex;
         size_t n1 = std::min(toEnd, n);
         memcpy(buffer, &values[rIndex], n1 * sizeof(T));
-        memcpy(buffer + n1, values, (n - n1) * sizeof(T));
-        return n;
-    }
-    size_t pop(T* buffer, size_t n) {
-        n = peek(buffer, n);
-        rIndex = (rIndex + n) % (N + 1);
+        memcpy(buffer + n1, &values[0], (n - n1) * sizeof(T));
         return n;
     }
     size_t pop(size_t n) {
@@ -109,14 +89,10 @@ public:
     }
 
     Iterator begin() {
-        return Iterator(values, N, rIndex);
+        return Iterator(&values[0], N, rIndex);
     }
     Iterator end() {
-        return Iterator(values, N, wIndex);
-    }
-
-    size_t capacity() const {
-        return N;
+        return Iterator(&values[0], N, wIndex);
     }
 private:
     T values[N + 1];
