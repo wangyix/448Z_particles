@@ -84,11 +84,17 @@ static bool spheresCollide(const ofVec3f& c1, float r1, const ofVec3f& v1,
     float a = vDiff.lengthSquared();
     float b_over_2 = cDiff.dot(vDiff);
     float c = cDiff.lengthSquared() - rSum*rSum;
-    float discr_over_4 = b_over_2*b_over_2 - a*c;
-    if (discr_over_4 < 0.f) {
+    float D_over_4 = b_over_2*b_over_2 - a*c;    
+    if (D_over_4 < 0.f) {
         return false;
     }
-    *t = (-b_over_2 - sqrtf(discr_over_4)) / a;    // smaller root
+    if (b_over_2 > 0.f) {
+        float z = -b_over_2 - sqrtf(D_over_4);
+        *t = z / a;
+    } else {
+        float z = -b_over_2 + sqrtf(D_over_4);
+        *t = c / z;
+    }
     return true;
 }
 
