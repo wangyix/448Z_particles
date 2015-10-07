@@ -241,23 +241,14 @@ void ofApp::update(){
 
             ofVec3f p1 = cBall.p + collision.t * cBall.v;
             ofVec3f p2 = cBall2.p + collision.t * cBall2.v;
-
             ofVec3f n = (p1 - p2).normalized();
-            
-            float a1 = cBall.v.dot(n);
-            float a2 = cBall2.v.dot(n);
-            vn = abs(a1 - a2);
-            
-            float optimizedP = (2.f * (a1 - a2)) / (cBall.m + cBall2.m);
 
-            ofVec3f vNext = cBall.v - optimizedP * cBall2.m * n;
-            ofVec3f vNext2 = cBall2.v + optimizedP * cBall.m * n;
-            
+            float eps = 0.5f * (cBall.rFactor + cBall2.rFactor);
 
-            /*float Cr = 1.f;// 0.5f * (rFactors[ci] + rFactors[ci2]);
-            ofVec3f vNext = (cBall.m*cBall.v + cBall2.m*cBall2.v + cBall2.m*Cr*(cBall2.v - cBall.v)) / (cBall.m + cBall2.m);
-            ofVec3f vNext2 = (cBall.m*cBall.v + cBall2.m*cBall2.v + cBall.m*Cr*(cBall.v - cBall2.v)) / (cBall.m + cBall2.m);
-            */
+            vn = (cBall.v - cBall2.v).dot(n);
+            float J = -(1.f + eps)*vn / (1.f / cBall.m + 1.f / cBall2.m);
+            ofVec3f vNext = cBall.v + J / cBall.m * n;
+            ofVec3f vNext2 = cBall2.v - J / cBall2.m * n;
 
             cBall.p += collision.t * (cBall.v - vNext);     // move to contact pt, then backstep
             cBall2.p += collision.t * (cBall2.v - vNext2);
