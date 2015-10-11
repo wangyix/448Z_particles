@@ -1,0 +1,24 @@
+Arrow keys determine direction of gravity (i.e. up arrow for up, left arrow for left, etc).
+Hold mouse to exert an attractive force on all nearby particles.
+
+Findings:
+
+To handle playing sound on collisions, the click will actually play one-frame
+after the collision occurs on the screen. This is so that when multiple
+collisions occur in one frame, the clicks won't all begin playing immediately.
+Each collision will cause a new click to be queued up with up to a frame's
+worth of delay (0 <= delay <= dt).  How much delay depends on when the
+collision occurred within the update period dt: if it occured early, then the
+delay is close to 0; if it occured late, then the delay is closer to dt.
+
+
+One interesting case is when a ball eventually stopped bouncing and is rolling
+around the ground. This causes it to "collide" with the ground every frame and
+would cause the click sound to be constantly played.  To address this, a
+minimum threshold for the normal component of the velocity of the particle at
+impact was added so that any impact below the threshold will not play any
+sound.  From experimentation, it was discovered that a good value for this
+threshold is 4*g*dt, where g is the acceleration due to gravity and dt is the
+time since the last frame.
+
+
