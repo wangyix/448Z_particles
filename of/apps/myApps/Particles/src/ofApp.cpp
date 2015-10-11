@@ -342,7 +342,7 @@ void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
     audioBufferLock.unlock();
     int samplesRemaining = nChannels * bufferSize - samplesPopped;
     if (samplesRemaining > 0) {
-        memset(&output[samplesPopped], 0, samplesRemaining);
+        memset(&output[samplesPopped], 0, samplesRemaining * sizeof(float));
     }
 }
 
