@@ -167,13 +167,6 @@ void ofApp::update(){
         }
     }
 
-    WavInstance newWavInstances[MAX_WAV_INSTANCES];
-    int newWavCount = 0;
-    const float vn_unattenuated = dt * 60000.f;
-    const float vn_threshold = 3.f * dt * GRAVITY_MAG;
-
-
-
     // compute collision times between all object pairs
     for (int i = 0; i < N_BALLS; i++) {
         wallCollisionTable[i].id = wallCollide(balls[i].p, BALL_RADIUS, balls[i].v, 0.f, &wallCollisionTable[i].t);
@@ -184,6 +177,10 @@ void ofApp::update(){
             //ballCollisionTable[j * N_BALLS + i] = t;
         }
     }
+    
+    
+    const float vn_unattenuated = dt * 60000.f;
+    const float vn_threshold = 3.f * dt * GRAVITY_MAG;
 
     float tAt = 0.f;
     while (true) {
@@ -269,9 +266,23 @@ void ofApp::update(){
         // add new wav instance for collision sound
         float atten = (vn - vn_threshold) / (vn_unattenuated - vn_threshold);
         atten = min(atten, 1.f);
-        if (atten > 0.f && newWavCount < MAX_WAV_INSTANCES) {
-            int sampleAt = (collision.t - dt) * AUDIO_SAMPLE_RATE;
-            newWavInstances[newWavCount++] = WavInstance(sampleAt, atten);
+        if (atten > 0.f) {
+            int samplesStartAt = SAMPLES_DELAY + (int)(collision.t * AUDIO_SAMPLE_RATE);
+            int samplesToAdd = 2 * WAV_SAMPLES;
+            int additionalCapcityNeeded = samplesStartAt + samplesToAdd - audioBuffer.size();
+            if (additionalCapcityNeeded > 0) {
+                int zerosPushed = audioBuffer.pushZeros(additionalCapcityNeeded);
+                assert(zerosPushed == additionalCapcityNeeded);
+            }
+            audioBufferLock.lock();
+            auto iter = audioBuffer.at(samplesStartAt);
+            for (int i = 0; i < WAV_SAMPLES; i++) {
+                *iter += atten * wav[i];        // 2 channels
+                ++iter;
+                *iter += atten * wav[i];
+                ++iter;
+            }
+            audioBufferLock.unlock();
         }
         tAt = collision.t;
     }
@@ -280,19 +291,6 @@ void ofApp::update(){
     // update all ball positions to end of frame
     for (int i = 0; i < N_BALLS; i++) {
         balls[i].p += dt * balls[i].v;
-    }
-
-    // sort by sampleAt and record the new wav instances
-    if (newWavCount > 0) {
-        std::sort(newWavInstances, &newWavInstances[newWavCount],
-                  [](const WavInstance& a, const WavInstance& b) -> bool
-        {
-            return a.sampleAt > b.sampleAt;
-        });
-
-        wavInstancesLock.lock();
-        wavInstances.push(newWavInstances, newWavCount);
-        wavInstancesLock.unlock();
     }
 }
 
@@ -339,42 +337,12 @@ void ofApp::draw(){
 
 //--------------------------------------------------------------
 void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
-    memset(output, 0, nChannels * bufferSize * sizeof(float));
-    
-    // for each wav instance, add samples to audio buffer and advance sample offset
-    int instancesCompleted = 0;
-    auto end = wavInstances.end();
-    for (auto wavIter = wavInstances.begin(); wavIter != end; ++wavIter) {
-        WavInstance& wavInstance = *wavIter;
-        if (wavInstance.sampleAt <= -bufferSize) {
-            wavInstance.sampleAt += bufferSize;
-            continue;
-        }
-        int samplesToPush = bufferSize;
-        float* outputAt = output;
-        if (wavInstance.sampleAt < 0) {
-            samplesToPush += wavInstance.sampleAt;
-            outputAt -= wavInstance.sampleAt;
-            wavInstance.sampleAt = 0;
-        }
-        if (wavInstance.sampleAt + samplesToPush > WAV_SAMPLES) {
-            samplesToPush = WAV_SAMPLES - wavInstance.sampleAt;
-            instancesCompleted++;
-        }
-
-        for (int i = 0; i < samplesToPush; i++) {
-            for (int j = 0; j < nChannels; j++) {
-                *(outputAt++) += wavInstance.atten * wav[wavInstance.sampleAt];
-            }
-            wavInstance.sampleAt++;
-        }
-    }
-    // since wavInstances is sorted, the instances that are done playing must be
-    // at the front (read location) of the circular buffer.
-    if (instancesCompleted > 0) {
-        wavInstancesLock.lock();
-        wavInstances.pop(instancesCompleted);
-        wavInstancesLock.unlock();
+    audioBufferLock.lock();
+    int samplesPopped = audioBuffer.pop(output, bufferSize * nChannels);
+    audioBufferLock.unlock();
+    int samplesRemaining = nChannels * bufferSize - samplesPopped;
+    if (samplesRemaining > 0) {
+        memset(&output[samplesPopped], 0, samplesRemaining);
     }
 }
 

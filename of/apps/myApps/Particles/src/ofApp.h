@@ -5,7 +5,7 @@
 #include "ofMain.h"
 #include "RingBuffer.h"
 
-#define N_BALLS 100
+#define N_BALLS 10
 #define BALL_RADIUS 10.0     // in pixels
 #define MAX_WAV_INSTANCES 64
 
@@ -15,18 +15,13 @@
 #define GRAVITY_MAG 400.0
 
 #define AUDIO_SAMPLE_RATE 44100
+#define SAMPLES_DELAY 1470
+
 #define WAV_SAMPLES 4876
 
 #define NUM_MATERIALS 4
 
 #define MOUSE_CURSOR_MASS 200000.0    // how attractive the cursor is when held down; unit is abitrary
-
-struct WavInstance {
-    WavInstance() : sampleAt(0), atten(0.f) {}
-    WavInstance(int sampleAt, float atten) : sampleAt(sampleAt), atten(atten) {}
-    int sampleAt;
-    float atten;
-};
 
 struct Sphere {
     ofVec3f p;
@@ -85,6 +80,6 @@ private:
 
     // Each entry is the sample index that wav instance is currently being played at.  A negative
     // value indicates a delay before that instance begins playing.
-    RingBuffer<WavInstance, MAX_WAV_INSTANCES> wavInstances;
-    std::mutex wavInstancesLock;
+    RingBuffer<float, 2 * AUDIO_SAMPLE_RATE> audioBuffer;
+    std::mutex audioBufferLock;
 };
