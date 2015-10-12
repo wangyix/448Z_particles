@@ -32,8 +32,8 @@ void ofApp::setup(){
 
     // initialize ball positions, velocities, rFactors to random values
     const float MAX_SPEED = 1.f;
-    const float MIN_RADIUS = 0.02f;
-    const float MAX_RADIUS = 0.04f;
+    const float MIN_RADIUS = 0.002f;
+    const float MAX_RADIUS = 0.004f;
     const float MIN_RFACTOR = 0.3f;
     const float MAX_RFACTOR = 0.8f;
     for (int i = 0; i < N_BALLS; i++) {
@@ -302,7 +302,7 @@ void ofApp::update(){
             SConst = SConst1 + SConst2;
         }
         
-        SConst *= 400.f;
+        SConst *= 10000.f;
 
         // add audio samples to ring buffer
         int samplesStartAt = collision.t * (CHANNELS * AUDIO_SAMPLE_RATE);
@@ -328,7 +328,7 @@ if (abs(sample) > maxSample) {
             t += 1.f / AUDIO_SAMPLE_RATE;
         }
         audioBufferLock.unlock();
-        printf("%f ", maxSample);
+        //printf("%f\t%f\n", tau, maxSample);
                 
         tAt = collision.t;
     }
