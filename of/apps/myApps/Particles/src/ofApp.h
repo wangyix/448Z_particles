@@ -8,12 +8,12 @@
 #define N_BALLS 10
 //#define MAX_WAV_INSTANCES 64
 
-#define PIXELS_PER_METER 3200.0
+#define PIXELS_PER_METER 8000.0
 
 #define BOX_ZMIN (-400.0 / PIXELS_PER_METER)
 #define BOX_ZMAX 0.0
 
-#define GRAVITY_MAG 2.0
+#define GRAVITY_MAG 0.2
 
 #define AUDIO_SAMPLE_RATE 44100
 #define CHANNELS 2
@@ -22,7 +22,7 @@
 
 #define NUM_MATERIALS 4
 
-#define MOUSE_CURSOR_MASS 0.3    // how attractive the cursor is when held down; unit is abitrary
+#define MOUSE_CURSOR_MASS 0.03    // how attractive the cursor is when held down; unit is abitrary
 
 struct Sphere {
     ofVec3f p;
