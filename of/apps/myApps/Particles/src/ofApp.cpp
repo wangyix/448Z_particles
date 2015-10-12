@@ -31,15 +31,21 @@ void ofApp::setup(){
 
 
     // initialize ball positions, velocities, rFactors to random values
-    const float MAX_SPEED = 500.f;
+    const float MAX_SPEED = 1.f;
+    const float MIN_RADIUS = 0.02f;
+    const float MAX_RADIUS = 0.04f;
     const float MIN_RFACTOR = 0.3f;
-    const float MAX_RFACTOR = 0.9f;
+    const float MAX_RFACTOR = 0.8f;
     for (int i = 0; i < N_BALLS; i++) {
-        balls[i].p.x = pMin.x + ofRandomuf() * (pMax.x - pMin.x);
-        balls[i].p.y = pMin.y + ofRandomuf() * (pMax.y - pMin.y);
-        balls[i].p.z = pMin.z + ofRandomuf() * (pMax.z - pMin.z);
+        // random radius
+        balls[i].r = MIN_RADIUS + ofRandomuf() * (MAX_RADIUS - MIN_RADIUS);
 
-        // randomly sample point on unit sphere with uniform distribution
+        // random starting position
+        balls[i].p.x = pMin.x + balls[i].r + ofRandomuf() * (pMax.x - pMin.x - 2.f*balls[i].r);
+        balls[i].p.y = pMin.y + balls[i].r + ofRandomuf() * (pMax.y - pMin.y - 2.f*balls[i].r);
+        balls[i].p.z = pMin.z + balls[i].r + ofRandomuf() * (pMax.z - pMin.z - 2.f*balls[i].r);
+
+        // random velocity (randomly sample unit sphere surface with uniform distribution)
         float theta = TWO_PI * ofRandomuf();
         float phi = acosf(2.f * ofRandomuf() - 1.f);
         float speed = ofRandomuf() * MAX_SPEED;
@@ -51,7 +57,7 @@ void ofApp::setup(){
 
         // choose a material
         int mi = min((int)(ofRandomuf() * NUM_MATERIALS), NUM_MATERIALS - 1);
-        balls[i].m = 0.001f * BALL_RADIUS * BALL_RADIUS * BALL_RADIUS * materials[mi].density;
+        balls[i].m = (4.f / 3.f * PI) * balls[i].r * balls[i].r * balls[i].r * materials[mi].density;
         balls[i].yMod = materials[mi].yMod;
         balls[i].pRatio = materials[mi].pRatio;
         balls[i].color = materials[mi].color;
@@ -62,7 +68,9 @@ void ofApp::setup(){
     
     ballCollisionTable = new float[N_BALLS * N_BALLS];
 
-    ofSoundStreamSetup(2, 0, AUDIO_SAMPLE_RATE, 256, 4);
+    listenPos = ofVec3f(0.5f * (pMin.x + pMax.x), 0.5f * (pMin.y + pMax.y), BOX_ZMAX);
+
+    ofSoundStreamSetup(CHANNELS, 0, AUDIO_SAMPLE_RATE, 256, 4);
     ofSetFrameRate(60);
 }
 
@@ -75,12 +83,10 @@ enum WallId{ NONE = -1, XMIN = -2, XMAX = -3, YMIN = -4, YMAX = -5, ZMIN = -6, Z
 
 
 // will return smaller root
-static bool spheresCollide(const ofVec3f& c1, float r1, const ofVec3f& v1,
-                           const ofVec3f& c2, float r2, const ofVec3f& v2,
-                           float* t) {
-    ofVec3f cDiff = c1 - c2;
-    ofVec3f vDiff = v1 - v2;
-    float rSum = r1 + r2;
+static bool spheresCollide(const Sphere& ball1, const Sphere& ball2, float* t) {
+    ofVec3f cDiff = ball1.p - ball2.p;
+    ofVec3f vDiff = ball1.v - ball2.v;
+    float rSum = ball1.r + ball2.r;
     float a = vDiff.lengthSquared();
     float b_over_2 = cDiff.dot(vDiff);
     float c = cDiff.lengthSquared() - rSum*rSum;
@@ -99,55 +105,70 @@ static bool spheresCollide(const ofVec3f& c1, float r1, const ofVec3f& v1,
 }
 
 // will update t to time of first wall collision, and update wallId to that wall
-int ofApp::wallCollide(const ofVec3f& c1, float r1, const ofVec3f& v1, float tMin, float* t) {
+int ofApp::wallCollide(const Sphere& ball, float tMin, float* t) {
     *t = positiveInfinity;
     int id = NONE;
-    if (v1.x > 0.f) {
-        //assert(c1.x <= pMax.x);
-        float tx = (pMax.x - c1.x) / v1.x;
+    if (ball.v.x > 0.f) {
+        float tx = (pMax.x - ball.r - ball.p.x) / ball.v.x;
         if (tx >= tMin && tx < *t) {
             *t = tx;
             id = XMAX;
         }
     } else {
-        //assert(c1.x >= pMin.x);
-        float tx = (pMin.x - c1.x) / v1.x;
+        float tx = (pMin.x + ball.r - ball.p.x) / ball.v.x;
         if (tx >= tMin && tx < *t) {
             *t = tx;
             id = XMIN;
         }
     }
-    if (v1.y > 0.f) {
-        //assert(c1.y <= pMax.y);
-        float ty = (pMax.y - c1.y) / v1.y;
+    if (ball.v.y > 0.f) {
+        float ty = (pMax.y - ball.r - ball.p.y) / ball.v.y;
         if (ty >= tMin && ty < *t) {
             *t = ty;
             id = YMAX;
         }
     } else {
-        //assert(c1.y >= pMin.y);
-        float ty = (pMin.y - c1.y) / v1.y;
+        float ty = (pMin.y + ball.r - ball.p.y) / ball.v.y;
         if (ty >= tMin && ty < *t) {
             *t = ty;
             id = YMIN;
         }
     }
-    if (v1.z > 0.f) {
-        //assert(c1.z <= pMax.z);
-        float tz = (pMax.z - c1.z) / v1.z;
+    if (ball.v.z > 0.f) {
+        float tz = (pMax.z - ball.r - ball.p.z) / ball.v.z;
         if (tz >= tMin && tz < *t) {
             *t = tz;
             id = ZMAX;
         }
     } else {
-        //assert(c1.z >= pMin.z);             // will be triggered by the backstepping
-        float tz = (pMin.z - c1.z) / v1.z;
+        float tz = (pMin.z + ball.r - ball.p.z) / ball.v.z;
         if (tz >= tMin && tz < *t) {
             *t = tz;
             id = ZMIN;
         }
     }
     return id;
+}
+
+static float computeTau(float r1Inv, float m1Inv, float v1, float E1,
+                        float r2Inv, float m2Inv, float v2, float E2, float V) {
+    float r = 1.f / (r1Inv + r2Inv);
+    float m = 1.f / (m1Inv + m2Inv);
+    float E = 1.f / ((1 - v1*v1) / E1 + (1 - v2*v2) / E2);
+    return 2.87f * pow((m*m / (r*E*E*V)), 0.2);
+}
+
+static float computeSConst(const Sphere& ball, const ofVec3f& listenPos, float tau, const ofVec3f& VDir, float J) {
+    ofVec3f toListener = listenPos - ball.p;
+    float dist = toListener.length();
+    ofVec3f toListenerDir = toListener / dist;
+
+    float pConst = 1.2f * ball.r * ball.r * ball.r * VDir.dot(toListener) / (2.f * 330.f * dist);
+    float d2Vdt2Const = PI / (2.f * ball.m * tau) * abs(J);
+    float SConst = -12.f / (tau * tau);
+
+    float combinedConst = pConst * d2Vdt2Const * SConst;
+    return combinedConst;
 }
 
 //--------------------------------------------------------------
@@ -169,16 +190,16 @@ void ofApp::update(){
 
     // compute collision times between all object pairs
     for (int i = 0; i < N_BALLS; i++) {
-        wallCollisionTable[i].id = wallCollide(balls[i].p, BALL_RADIUS, balls[i].v, 0.f, &wallCollisionTable[i].t);
+        wallCollisionTable[i].id = wallCollide(balls[i], 0.f, &wallCollisionTable[i].t);
         for (int j = i + 1; j < N_BALLS; j++) {
             float t = -1.f;
-            spheresCollide(balls[i].p, BALL_RADIUS, balls[i].v, balls[j].p, BALL_RADIUS, balls[j].v, &t);
+            spheresCollide(balls[i], balls[j], &t);
             ballCollisionTable[i * N_BALLS + j] = t;
             //ballCollisionTable[j * N_BALLS + i] = t;
         }
     }
     
-    
+
     const float vn_unattenuated = dt * 60000.f;
     const float vn_threshold = 3.f * dt * GRAVITY_MAG;
 
@@ -208,9 +229,10 @@ void ofApp::update(){
         assert(collision.t >= tAt);
         assert(collision.id != NONE);
 
-        float vn;
-
+        float tau;
+        float SConst;
         if (collision.id < -1) {            // wall collision
+            float vn;
             Sphere& cBall = balls[ci];
             ofVec3f vNext = cBall.v;
             switch (collision.id) {
@@ -230,11 +252,21 @@ void ofApp::update(){
                 vn = abs(cBall.v.z);
                 break;
             }
+            ofVec3f impulse = (vNext - cBall.v) * cBall.m;
+            float J = impulse.length();
+            ofVec3f VDir = impulse / J;
+
             cBall.p += collision.t * (cBall.v - vNext); // move it to contact point, then backstep in time
             cBall.v = vNext;
 
             // update collision tables
             updateBallCollisions(ci, collision.t);
+
+            // compute tau, SConst
+            tau = computeTau(1.f / cBall.r, 1.f / cBall.m, cBall.pRatio, cBall.yMod,
+                             0.f, 0.f, materials[0].pRatio, materials[0].yMod, vn);
+            SConst = computeSConst(cBall, listenPos, tau, VDir, J);
+
         } else {    //if (collision.id >= 0) {     // ball collision
             assert(ci != collision.id);
 
@@ -248,8 +280,8 @@ void ofApp::update(){
 
             float eps = 0.5f * (cBall.rFactor + cBall2.rFactor);
 
-            vn = (cBall.v - cBall2.v).dot(n);
-            float J = -(1.f + eps)*vn / (1.f / cBall.m + 1.f / cBall2.m);
+            float vn = (cBall2.v - cBall.v).dot(n);
+            float J = (1.f + eps)*vn / (1.f / cBall.m + 1.f / cBall2.m);
             ofVec3f vNext = cBall.v + J / cBall.m * n;
             ofVec3f vNext2 = cBall2.v - J / cBall2.m * n;
 
@@ -261,29 +293,43 @@ void ofApp::update(){
             // update collision tables
             updateBallCollisions(ci, collision.t);
             updateBallCollisions(ci2, collision.t);
-        }
 
-        // add new wav instance for collision sound
-        float atten = (vn - vn_threshold) / (vn_unattenuated - vn_threshold);
-        atten = min(atten, 1.f);
-        if (atten > 0.f) {
-            int samplesStartAt = SAMPLES_DELAY + (int)(collision.t * AUDIO_SAMPLE_RATE);
-            int samplesToAdd = 2 * WAV_SAMPLES;
-            int additionalCapcityNeeded = samplesStartAt + samplesToAdd - audioBuffer.size();
-            if (additionalCapcityNeeded > 0) {
-                int zerosPushed = audioBuffer.pushZeros(additionalCapcityNeeded);
-                assert(zerosPushed == additionalCapcityNeeded);
-            }
-            audioBufferLock.lock();
-            auto iter = audioBuffer.at(samplesStartAt);
-            for (int i = 0; i < WAV_SAMPLES; i++) {
-                *iter += atten * wav[i];        // 2 channels
-                ++iter;
-                *iter += atten * wav[i];
-                ++iter;
-            }
-            audioBufferLock.unlock();
+            // compute tau, SConst
+            tau = computeTau(1.f / cBall.r, 1.f / cBall.m, cBall.pRatio, cBall.yMod,
+                             1.f / cBall2.r, 1.f / cBall2.m, cBall2.pRatio, cBall2.yMod, abs(vn));
+            float SConst1 = computeSConst(cBall, listenPos, tau, n, abs(J));
+            float SConst2 = computeSConst(cBall2, listenPos, tau, -n, abs(J));
+            SConst = SConst1 + SConst2;
         }
+        
+        SConst *= 400.f;
+
+        // add audio samples to ring buffer
+        int samplesStartAt = collision.t * (CHANNELS * AUDIO_SAMPLE_RATE);
+        int samplesToAdd = tau * (CHANNELS * AUDIO_SAMPLE_RATE);
+        int additionalCapcityNeeded = samplesStartAt + samplesToAdd - audioBuffer.size();
+        if (additionalCapcityNeeded > 0) {
+            int zerosPushed = audioBuffer.pushZeros(additionalCapcityNeeded);
+            assert(zerosPushed == additionalCapcityNeeded);
+        }
+float maxSample = 0.f;  //for testing
+        float t = 0.f;
+        audioBufferLock.lock();
+        auto iter = audioBuffer.at(samplesStartAt);
+        for (int i = 0; i < samplesToAdd / CHANNELS; i++) {
+            float sample = SConst * (t - 0.5f * tau) * sin(PI*t / tau);
+if (abs(sample) > maxSample) {
+    maxSample = abs(sample);
+}
+            for (int j = 0; j < CHANNELS; j++) {
+                *iter += sample;
+                ++iter;
+            }
+            t += 1.f / AUDIO_SAMPLE_RATE;
+        }
+        audioBufferLock.unlock();
+        printf("%f ", maxSample);
+                
         tAt = collision.t;
     }
 
@@ -295,15 +341,15 @@ void ofApp::update(){
 }
 
 void ofApp::updateBallCollisions(int index, float tMin) {
-    wallCollisionTable[index].id = wallCollide(balls[index].p, BALL_RADIUS, balls[index].v, tMin, &wallCollisionTable[index].t);
+    wallCollisionTable[index].id = wallCollide(balls[index], tMin, &wallCollisionTable[index].t);
     for (int i = 0; i < index; i++) {
         float t = -1.f;
-        spheresCollide(balls[index].p, BALL_RADIUS, balls[index].v, balls[i].p, BALL_RADIUS, balls[i].v, &t);
+        spheresCollide(balls[index], balls[i], &t);
         ballCollisionTable[i * N_BALLS + index] = t;
     }
     for (int j = index + 1; j < N_BALLS; j++) {
         float t = -1.f;
-        spheresCollide(balls[index].p, BALL_RADIUS, balls[index].v, balls[j].p, BALL_RADIUS, balls[j].v, &t);
+        spheresCollide(balls[index], balls[j], &t);
         ballCollisionTable[index * N_BALLS + j] = t;
     }
 }
@@ -325,9 +371,10 @@ void ofApp::draw(){
     bottomWall.draw();
 
     // draw balls
-    ofIcoSpherePrimitive sphere(BALL_RADIUS, 1);
+    ofIcoSpherePrimitive sphere(0.f, 2);
     for (int i = 0; i < N_BALLS; i++) {
-        sphere.setPosition(balls[i].p);
+        sphere.setRadius(balls[i].r * PIXELS_PER_METER);
+        sphere.setPosition(balls[i].p * PIXELS_PER_METER);
         ofSetColor(balls[i].color);
         sphere.draw();
     }
@@ -338,9 +385,9 @@ void ofApp::draw(){
 //--------------------------------------------------------------
 void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
     audioBufferLock.lock();
-    int samplesPopped = audioBuffer.pop(output, bufferSize * nChannels);
+    int samplesPopped = audioBuffer.pop(output, bufferSize * CHANNELS);
     audioBufferLock.unlock();
-    int samplesRemaining = nChannels * bufferSize - samplesPopped;
+    int samplesRemaining = CHANNELS * bufferSize - samplesPopped;
     if (samplesRemaining > 0) {
         memset(&output[samplesPopped], 0, samplesRemaining * sizeof(float));
     }
@@ -378,13 +425,13 @@ void ofApp::mouseMoved(int x, int y ){
 
 //--------------------------------------------------------------
 void ofApp::mouseDragged(int x, int y, int button){
-    attractPos = ofVec3f(x, y, 0.5f * (BOX_ZMIN + BOX_ZMAX));
+    attractPos = ofVec3f(x / PIXELS_PER_METER, y / PIXELS_PER_METER, 0.5f * (BOX_ZMIN + BOX_ZMAX));
 }
 
 //--------------------------------------------------------------
 void ofApp::mousePressed(int x, int y, int button){
     attract = true;
-    attractPos = ofVec3f(x, y, 0.5f * (BOX_ZMIN + BOX_ZMAX));
+    attractPos = ofVec3f(x / PIXELS_PER_METER, y / PIXELS_PER_METER, 0.5f * (BOX_ZMIN + BOX_ZMAX));
 }
 
 //--------------------------------------------------------------
@@ -394,41 +441,42 @@ void ofApp::mouseReleased(int x, int y, int button){
 
 //--------------------------------------------------------------
 void ofApp::windowResized(int w, int h){
-    ofSetupScreenPerspective(w, h, 60.f, BOX_ZMAX, BOX_ZMIN);
+    ofSetupScreenPerspective(w, h, 60.f, BOX_ZMAX * PIXELS_PER_METER, BOX_ZMIN * PIXELS_PER_METER);
 
-    pMin.x = BALL_RADIUS;
-    pMax.x = w - BALL_RADIUS;
-    pMin.y = BALL_RADIUS;
-    pMax.y = h - BALL_RADIUS;
-    pMin.z = BOX_ZMIN + BALL_RADIUS;
-    pMax.z = BOX_ZMAX - BALL_RADIUS;
+    pMin.x = 0.f;
+    pMax.x = w / PIXELS_PER_METER;
+    pMin.y = 0.f;
+    pMax.y = h / PIXELS_PER_METER;
+    pMin.z = BOX_ZMIN;
+    pMax.z = BOX_ZMAX;
 
     for (int i = 0; i < N_BALLS; i++) {
-        balls[i].p.x = std::max(std::min(balls[i].p.x, pMax.x), pMin.x);
-        balls[i].p.y = std::max(std::min(balls[i].p.y, pMax.y), pMin.y);
-        balls[i].p.z = std::max(std::min(balls[i].p.z, pMax.z), pMin.z);
+        float r = balls[i].r;
+        balls[i].p.x = std::max(std::min(balls[i].p.x, pMax.x - r), pMin.x + r);
+        balls[i].p.y = std::max(std::min(balls[i].p.y, pMax.y - r), pMin.y + r);
+        balls[i].p.z = std::max(std::min(balls[i].p.z, pMax.z - r), pMin.z + r);
     }
 
 
-    pointLight.setPosition(w / 2, 10.f, 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    pointLight.setPosition(w / 2, 10.f, 0.5f*(BOX_ZMIN + BOX_ZMAX)*PIXELS_PER_METER);
 
     // initialize walls
 
-    leftWall = ofPlanePrimitive(BOX_ZMAX - BOX_ZMIN, h, 8, 8);
+    leftWall = ofPlanePrimitive((BOX_ZMAX - BOX_ZMIN)*PIXELS_PER_METER, h, 8, 8);
     rightWall = leftWall;
-    leftWall.setPosition(0.f, h / 2, 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    leftWall.setPosition(0.f, h / 2, 0.5f*(BOX_ZMIN + BOX_ZMAX)*PIXELS_PER_METER);
     leftWall.rotate(90.f, 0.f, 1.f, 0.f);
-    rightWall.setPosition(w, h / 2, 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    rightWall.setPosition(w, h / 2, 0.5f*(BOX_ZMIN + BOX_ZMAX)*PIXELS_PER_METER);
     rightWall.rotate(-90.f, 0.f, 1.f, 0.f);
 
     backWall = ofPlanePrimitive(w, h, 8, 8);
-    backWall.setPosition(w / 2, h / 2, BOX_ZMIN);
+    backWall.setPosition(w / 2, h / 2, BOX_ZMIN*PIXELS_PER_METER);
 
-    topWall = ofPlanePrimitive(w, BOX_ZMAX - BOX_ZMIN, 8, 8);
+    topWall = ofPlanePrimitive(w, (BOX_ZMAX - BOX_ZMIN)*PIXELS_PER_METER, 8, 8);
     bottomWall = topWall;
-    topWall.setPosition(w / 2, 0.f, 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    topWall.setPosition(w / 2, 0.f, 0.5f*(BOX_ZMIN + BOX_ZMAX)*PIXELS_PER_METER);
     topWall.rotate(-90.f, 1.f, 0.f, 0.f);
-    bottomWall.setPosition(w / 2, h, 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    bottomWall.setPosition(w / 2, h, 0.5f*(BOX_ZMIN + BOX_ZMAX)*PIXELS_PER_METER);
     bottomWall.rotate(90.f, 1.f, 0.f, 0.f);
 }
 

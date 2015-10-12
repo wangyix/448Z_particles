@@ -5,32 +5,33 @@
 #include "ofMain.h"
 #include "RingBuffer.h"
 
-#define N_BALLS 10
-#define BALL_RADIUS 10.0     // in pixels
-#define MAX_WAV_INSTANCES 64
+#define N_BALLS 5
+//#define MAX_WAV_INSTANCES 64
 
-#define BOX_ZMIN -400.0
+#define PIXELS_PER_METER 400.0
+
+#define BOX_ZMIN (-400.0 / PIXELS_PER_METER)
 #define BOX_ZMAX 0.0
 
-#define GRAVITY_MAG 400.0
+#define GRAVITY_MAG 2.0
 
 #define AUDIO_SAMPLE_RATE 44100
-#define SAMPLES_DELAY 1470
+#define CHANNELS 2
 
 #define WAV_SAMPLES 4876
 
 #define NUM_MATERIALS 4
 
-#define MOUSE_CURSOR_MASS 200000.0    // how attractive the cursor is when held down; unit is abitrary
+#define MOUSE_CURSOR_MASS 0.1    // how attractive the cursor is when held down; unit is abitrary
 
 struct Sphere {
     ofVec3f p;
     ofVec3f v;
-    float rFactor;
     float m;
+    float r;
+    float rFactor;  // restitution factor
     float yMod;
     float pRatio;
-
     ofColor color;
 };
 
@@ -60,7 +61,7 @@ public:
     void audioOut(float* output, int bufferSize, int nChannels) override;
 
 private:
-    int wallCollide(const ofVec3f& c1, float r1, const ofVec3f& v1, float tMin, float* t);
+    int wallCollide(const Sphere& ball, float tMin, float* t);
     void updateBallCollisions(int index, float tMin);
 
 private:
@@ -82,4 +83,6 @@ private:
     // value indicates a delay before that instance begins playing.
     RingBuffer<float, 2 * AUDIO_SAMPLE_RATE> audioBuffer;
     std::mutex audioBufferLock;
+
+    ofVec3f listenPos;
 };
