@@ -22,7 +22,7 @@
 
 #define NUM_MATERIALS 4
 
-#define MOUSE_CURSOR_MASS 0.03    // how attractive the cursor is when held down; unit is abitrary
+#define MOUSE_CURSOR_MASS 80.0    // how attractive the cursor is when held down; unit is abitrary
 
 struct Sphere {
     ofVec3f p;
