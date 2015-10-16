@@ -14,10 +14,10 @@ struct Material {
     ofColor color;
 };
 
-static const Material materials[NUM_MATERIALS] = { Material(123.4f, 8940.f, 0.34f, ofColor(255, 0, 0, 255)),
-                                                   Material(72.f, 2700.f, 0.19f, ofColor(0, 255, 0, 255)),
-                                                   Material(62.f, 2700.f, 0.20f, ofColor(0, 0, 255, 255)), 
-                                                   Material(2.4f, 1200.f, 0.37f, ofColor(255, 0, 255, 255)) };
+static const Material materials[NUM_MATERIALS] = { Material(8940.f, 123.4f * 1e9f, 0.34f, ofColor(255, 0, 0, 255)),
+                                                   Material(2700.f, 72.f * 1e9f, 0.19f, ofColor(0, 255, 0, 255)),
+                                                   Material(2700.f, 62.f * 1e9f, 0.20f, ofColor(0, 0, 255, 255)),
+                                                   Material(1200.f, 2.4f * 1e9f, 0.37f, ofColor(255, 0, 255, 255)) };
 
 
 //--------------------------------------------------------------
@@ -31,9 +31,9 @@ void ofApp::setup(){
 
 
     // initialize ball positions, velocities, rFactors to random values
-    const float MAX_SPEED = 0.2f;
-    const float MIN_RADIUS = 0.0008f;
-    const float MAX_RADIUS = 0.0016f;
+    const float MAX_SPEED = 10.f;
+    const float MIN_RADIUS = 0.2f;
+    const float MAX_RADIUS = 0.4f;
     const float MIN_RFACTOR = 0.3f;
     const float MAX_RFACTOR = 0.8f;
     for (int i = 0; i < N_BALLS; i++) {
@@ -56,7 +56,7 @@ void ofApp::setup(){
         balls[i].rFactor = MIN_RFACTOR + ofRandomuf() * (MAX_RFACTOR - MIN_RFACTOR);
 
         // choose a material
-        int mi = 3;// min((int)(ofRandomuf() * NUM_MATERIALS), NUM_MATERIALS - 1);
+        int mi = min((int)(ofRandomuf() * NUM_MATERIALS), NUM_MATERIALS - 1);
         balls[i].m = (4.f / 3.f * PI) * balls[i].r * balls[i].r * balls[i].r * materials[mi].density;
         balls[i].yMod = materials[mi].yMod;
         balls[i].pRatio = materials[mi].pRatio;
@@ -300,10 +300,9 @@ void ofApp::update(){
             float SConst1 = computeSConst(cBall, listenPos, tau, n, abs(J));
             float SConst2 = computeSConst(cBall2, listenPos, tau, -n, abs(J));
             SConst = SConst1 + SConst2;
-            SConst *= 100.f;
         }
         
-        SConst *= 100000.f;
+        SConst *= 0.0005f;
 
         // add audio samples to ring buffer
         int samplesStartAt = collision.t * (CHANNELS * AUDIO_SAMPLE_RATE);
@@ -329,8 +328,8 @@ if (abs(sample) > maxSample) {
             t += 1.f / AUDIO_SAMPLE_RATE;
         }
         audioBufferLock.unlock();
-        if (collision.id >= 0)
-            printf("%f\t%f\n", tau, maxSample);
+        //if (collision.id >= 0)
+            //printf("%f\n", maxSample);
                 
         tAt = collision.t;
     }

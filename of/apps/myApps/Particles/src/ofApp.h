@@ -8,12 +8,12 @@
 #define N_BALLS 10
 //#define MAX_WAV_INSTANCES 64
 
-#define PIXELS_PER_METER 8000.0
+#define PIXELS_PER_METER 50.0
 
 #define BOX_ZMIN (-400.0 / PIXELS_PER_METER)
 #define BOX_ZMAX 0.0
 
-#define GRAVITY_MAG 0.2
+#define GRAVITY_MAG 6.0
 
 #define AUDIO_SAMPLE_RATE 44100
 #define CHANNELS 2
