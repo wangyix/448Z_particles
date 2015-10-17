@@ -312,15 +312,12 @@ void ofApp::update(){
             int zerosPushed = audioBuffer.pushZeros(additionalCapcityNeeded);
             assert(zerosPushed == additionalCapcityNeeded);
         }
-float maxSample = 0.f;  //for testing
+
         float t = 0.f;
         audioBufferLock.lock();
         auto iter = audioBuffer.at(samplesStartAt);
         for (int i = 0; i < samplesToAdd / CHANNELS; i++) {
             float sample = SConst * (t - 0.5f * tau) * sin(PI*t / tau);
-if (abs(sample) > maxSample) {
-    maxSample = abs(sample);
-}
             for (int j = 0; j < CHANNELS; j++) {
                 *iter += sample;
                 ++iter;
@@ -328,8 +325,6 @@ if (abs(sample) > maxSample) {
             t += 1.f / AUDIO_SAMPLE_RATE;
         }
         audioBufferLock.unlock();
-        //if (collision.id >= 0)
-            //printf("%f\n", maxSample);
                 
         tAt = collision.t;
     }
