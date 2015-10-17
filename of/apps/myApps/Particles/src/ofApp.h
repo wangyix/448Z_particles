@@ -81,7 +81,7 @@ private:
 
     // Each entry is the sample index that wav instance is currently being played at.  A negative
     // value indicates a delay before that instance begins playing.
-    RingBuffer<float, 2 * AUDIO_SAMPLE_RATE> audioBuffer;
+    RingBuffer<float, CHANNELS * AUDIO_SAMPLE_RATE> audioBuffer;
     std::mutex audioBufferLock;
 
     ofVec3f listenPos;

@@ -32,8 +32,8 @@ void ofApp::setup(){
 
     // initialize ball positions, velocities, rFactors to random values
     const float MAX_SPEED = 10.f;
-    const float MIN_RADIUS = 0.2f;
-    const float MAX_RADIUS = 0.4f;
+    const float MIN_RADIUS = 0.15f;
+    const float MAX_RADIUS = 0.3f;
     const float MIN_RFACTOR = 0.3f;
     const float MAX_RFACTOR = 0.8f;
     for (int i = 0; i < N_BALLS; i++) {
@@ -171,6 +171,28 @@ static float computeSConst(const Sphere& ball, const ofVec3f& listenPos, float t
     return combinedConst;
 }
 
+static void add(float* dst, float* src, int size, float atten) {
+    for (int i = 0; i < size; i++) {
+        dst[i] += src[i] * atten;
+    }
+}
+
+static void blur(float* buffer, int size) {
+    float prev = (buffer[0] + buffer[1]) / 3.f;
+    for (int i = 1; i < size - 1; i++) {
+        float curr = (buffer[i - 1] + buffer[i] + buffer[i + 1]) / 3.f;
+        buffer[i - 1] = prev;
+        prev = curr;
+    }
+    float last = (buffer[size - 2] + buffer[size - 1]) / 3.f;
+    buffer[size - 2] = prev;
+    buffer[size - 1] = last;
+}
+
+static int secondsToSamples(float t) {
+    return ((int)(t * AUDIO_SAMPLE_RATE)) * CHANNELS;
+}
+
 //--------------------------------------------------------------
 void ofApp::update(){
     float dt = ofGetLastFrameTime();
@@ -199,9 +221,10 @@ void ofApp::update(){
         }
     }
     
-
-    const float vn_unattenuated = dt * 60000.f;
-    const float vn_threshold = 3.f * dt * GRAVITY_MAG;
+    float tempAudioBuffer[CHANNELS * AUDIO_SAMPLE_RATE];
+    memset(tempAudioBuffer, 0, CHANNELS * AUDIO_SAMPLE_RATE * sizeof(float));
+    int audioStart = CHANNELS * AUDIO_SAMPLE_RATE;
+    int audioEnd = -1;
 
     float tAt = 0.f;
     while (true) {
@@ -302,33 +325,61 @@ void ofApp::update(){
             SConst = SConst1 + SConst2;
         }
         
-        SConst *= 0.0005f;
+        SConst *= 0.0002f;
 
-        // add audio samples to ring buffer
-        int samplesStartAt = collision.t * (CHANNELS * AUDIO_SAMPLE_RATE);
-        int samplesToAdd = tau * (CHANNELS * AUDIO_SAMPLE_RATE);
-        int additionalCapcityNeeded = samplesStartAt + samplesToAdd - audioBuffer.size();
-        if (additionalCapcityNeeded > 0) {
-            int zerosPushed = audioBuffer.pushZeros(additionalCapcityNeeded);
-            assert(zerosPushed == additionalCapcityNeeded);
+        // add audio samples to temp audio buffer
+        int i = secondsToSamples(collision.t);
+        if (i < audioStart) {
+            audioStart = i;
         }
-
-        float t = 0.f;
-        audioBufferLock.lock();
-        auto iter = audioBuffer.at(samplesStartAt);
-        for (int i = 0; i < samplesToAdd / CHANNELS; i++) {
+        for (float t = 0.f; t < tau; t += 1.f / AUDIO_SAMPLE_RATE) {
             float sample = SConst * (t - 0.5f * tau) * sin(PI*t / tau);
             for (int j = 0; j < CHANNELS; j++) {
-                *iter += sample;
-                ++iter;
+                tempAudioBuffer[i++] += sample;
             }
-            t += 1.f / AUDIO_SAMPLE_RATE;
         }
-        audioBufferLock.unlock();
+        if (i > audioEnd) {
+            audioEnd = i;
+        }
                 
         tAt = collision.t;
     }
 
+    // process and add audio samples if any were produced this frame
+    if (audioEnd - audioStart > 0) {
+        float reverbAudioBuffer[CHANNELS * AUDIO_SAMPLE_RATE];
+        memset(reverbAudioBuffer, 0, CHANNELS * AUDIO_SAMPLE_RATE * sizeof(float));
+
+        // add delayed, attenuated copies of the original audio to the reverb audio buffer
+        add(&reverbAudioBuffer[audioStart + secondsToSamples(0.046f)], &tempAudioBuffer[audioStart], audioEnd - audioStart, 0.5f);
+        add(&reverbAudioBuffer[audioStart + secondsToSamples(0.082f)], &tempAudioBuffer[audioStart], audioEnd - audioStart, 0.25f);
+        add(&reverbAudioBuffer[audioStart + secondsToSamples(0.116f)], &tempAudioBuffer[audioStart], audioEnd - audioStart, 0.125f);
+        add(&reverbAudioBuffer[audioStart + secondsToSamples(0.2f)], &tempAudioBuffer[audioStart], audioEnd - audioStart, 0.0625f);
+        
+        // blur the reverb audio buffer
+        int reverbStart = audioStart + secondsToSamples(0.046f);
+        int reverbEnd = audioEnd + secondsToSamples(0.2f);
+        blur(&reverbAudioBuffer[reverbStart], reverbEnd - reverbStart);
+        blur(&reverbAudioBuffer[reverbStart], reverbEnd - reverbStart);
+        blur(&reverbAudioBuffer[reverbStart], reverbEnd - reverbStart);
+        
+        // add the original unattenuated audio to the reverb audio buffer
+        add(&reverbAudioBuffer[audioStart], &tempAudioBuffer[audioStart], audioEnd - audioStart, 1.f);        
+
+        // add samples from the reverb audio buffer to the audio ring buffer
+        audioBufferLock.lock();
+        int additionalCapcityNeeded = reverbEnd - audioBuffer.size();
+        if (additionalCapcityNeeded > 0) {
+            int zerosPushed = audioBuffer.pushZeros(additionalCapcityNeeded);
+            assert(zerosPushed == additionalCapcityNeeded);
+        }
+        auto iter = audioBuffer.at(audioStart);
+        for (int i = audioStart; i < reverbEnd; i++) {
+            *iter += reverbAudioBuffer[i];
+            ++iter;
+        }
+        audioBufferLock.unlock();
+    }
 
     // update all ball positions to end of frame
     for (int i = 0; i < N_BALLS; i++) {
