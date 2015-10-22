@@ -31,7 +31,6 @@ void ofApp::setup(){
 
 #if EXTENSION_SCENE
     const float BALL_RADIUS = 0.2f;
-    /*
     {
         const ofVec3f tetrahedronVertices[4] = {
             ofVec3f(1.f, 0.f, -1.f / sqrtf(2.f)),
@@ -59,8 +58,7 @@ void ofApp::setup(){
             }
         }
         nonRandomBalls += 4;
-    }*/
-
+    }
     {
         const ofVec3f cubeVertices[8] = {
             ofVec3f(-1.f, -1.f, -1.f),
@@ -462,8 +460,8 @@ void ofApp::update(){
         audioBufferLock.lock();
         int additionalCapcityNeeded = audioEnd - audioBuffer.size();
         if (additionalCapcityNeeded > 0) {
-            int zerosPushed = audioBuffer.pushZeros(additionalCapcityNeeded);
-            assert(zerosPushed == additionalCapcityNeeded);
+            audioBuffer.pushZeros(additionalCapcityNeeded);
+            audioEnd = audioBuffer.size();  // in case audioBuffer couldn't push the requested amount of zeros 
         }
         auto iter = audioBuffer.at(audioStart);
         for (int i = audioStart; i < audioEnd; i++) {
@@ -541,6 +539,8 @@ void ofApp::draw(){
         cylinder.draw();
     }
 
+    ofDisableLighting();
+    ofSetColor(255, 255, 255);
     ofDrawBitmapString(ofToString(ofGetFrameRate()) + "fps", 10, 15);
 }
 
