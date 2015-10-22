@@ -5,7 +5,10 @@
 #include "ofMain.h"
 #include "RingBuffer.h"
 
-#define N_BALLS 10
+#define EXTENSION_SCENE 1
+
+
+#define N_BALLS 12
 //#define MAX_WAV_INSTANCES 64
 
 #define PIXELS_PER_METER 50.0
@@ -24,7 +27,17 @@
 
 #define MOUSE_CURSOR_MASS 80.0    // how attractive the cursor is when held down; unit is abitrary
 
+struct Material {
+    Material(float density, float yMod, float pRatio, const ofColor& color)
+        : density(density), yMod(yMod), pRatio(pRatio), color(color) {}
+    float density;
+    float yMod;
+    float pRatio;
+    ofColor color;
+};
+
 struct Sphere {
+    void setMaterial(const Material& m);
     ofVec3f p;
     ofVec3f v;
     float m;
@@ -33,6 +46,16 @@ struct Sphere {
     float yMod;
     float pRatio;
     ofColor color;
+};
+
+struct Spring {
+    Spring(int ballId1, int ballId2, float L, float k, float c)
+        : ballId1(ballId1), ballId2(ballId2), L(L), k(k), c(c) {}
+    int ballId1;
+    int ballId2;
+    float L;    // length
+    float k;    // spring constant
+    float c;    // damping coefficient
 };
 
 struct Collision {
@@ -70,6 +93,7 @@ private:
 
     ofVec3f pMin, pMax;                 // bounds on ball position
     Sphere balls[N_BALLS];
+    vector<Spring> springs;
 
     ofVec3f gravity;                    // acceleration due to gravity
     
