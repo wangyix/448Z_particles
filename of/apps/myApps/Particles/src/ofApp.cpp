@@ -22,6 +22,7 @@ static void readObj(const string& fileName, ofMesh& mesh) {
         return;
     }
     mesh.clear();
+    vector<ofVec3f> vertices;
     string line;
     while (getline(file, line)) {
         char c;
@@ -31,12 +32,21 @@ static void readObj(const string& fileName, ofMesh& mesh) {
         else if (c == 'v') {
             ofVec3f v;
             iss >> v.x >> v.y >> v.z;
-            mesh.addVertex(v);
-            mesh.addNormal(v.normalized());
+            vertices.push_back(v);
         } else if (c == 'f') {
-            int i1, i2, i3;
-            iss >> i1 >> i2 >> i3;
-            mesh.addTriangle(i1 - 1, i2 - 1, i3 - 1);
+            int indices[3];
+            iss >> indices[0] >> indices[1] >> indices[2];
+            ofVec3f v[3];
+            for (int i = 0; i < 3; i++) {
+                v[i] = vertices[--indices[i]];
+            }
+            ofVec3f n = (v[1] - v[0]).crossed(v[2] - v[0]).normalized();
+            int startIndex = mesh.getNumVertices();
+            for (int i = 0; i < 3; i++) {
+                mesh.addVertex(v[i]);
+                mesh.addNormal(n);
+            }
+            mesh.addTriangle(startIndex, startIndex + 1, startIndex + 2);
         } else{
             std::cout << "Warning: unrecognized line type " << c << endl;
         }
@@ -52,6 +62,8 @@ void ofApp::setup(){
     // read objs
     meshes.push_back(ofMesh());
     readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/sphere/sphere.obj", meshes.back());
+    //readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/rod/rod.obj", meshes.back());
+    //readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/ground/ground.obj", meshes.back());
 
     // initialize light
     ofSetSmoothLighting(true);
@@ -118,7 +130,7 @@ void ofApp::draw(){
 
     ofSetColor(255, 255, 255);
     ofTranslate(0.3f * pMin + 0.7f * pMax * PIXELS_PER_METER);
-    ofScale(PIXELS_PER_METER, PIXELS_PER_METER, PIXELS_PER_METER);
+    ofScale(4 * PIXELS_PER_METER, 4 * PIXELS_PER_METER, 4 * PIXELS_PER_METER);
     meshes[0].draw();
     ofLoadIdentityMatrix();
 
