@@ -22,7 +22,7 @@ static void readObj(const string& fileName, ofMesh& mesh) {
         return;
     }
     mesh.clear();
-    vector<ofVec3f> vertices;
+    vector<ofVec3f> normals;
     string line;
     while (getline(file, line)) {
         char c;
@@ -32,26 +32,29 @@ static void readObj(const string& fileName, ofMesh& mesh) {
         else if (c == 'v') {
             ofVec3f v;
             iss >> v.x >> v.y >> v.z;
-            vertices.push_back(v);
+            mesh.addVertex(v);
+            normals.emplace_back(0.f, 0.f, 0.f);
         } else if (c == 'f') {
             int indices[3];
             iss >> indices[0] >> indices[1] >> indices[2];
             ofVec3f v[3];
             for (int i = 0; i < 3; i++) {
-                v[i] = vertices[--indices[i]];
+                v[i] = mesh.getVertex(--indices[i]);
             }
             ofVec3f n = (v[1] - v[0]).crossed(v[2] - v[0]).normalized();
-            int startIndex = mesh.getNumVertices();
             for (int i = 0; i < 3; i++) {
-                mesh.addVertex(v[i]);
-                mesh.addNormal(n);
+                normals[indices[i]] += n;
             }
-            mesh.addTriangle(startIndex, startIndex + 1, startIndex + 2);
+            mesh.addTriangle(indices[0], indices[1], indices[2]);
         } else{
             std::cout << "Warning: unrecognized line type " << c << endl;
         }
     }
     file.close();
+    for (int i = 0; i < normals.size(); i++) {
+        normals[i].normalize();
+    }
+    mesh.addNormals(normals);
     mesh.setMode(OF_PRIMITIVE_TRIANGLES);
 }
 
@@ -61,9 +64,9 @@ void ofApp::setup(){
 
     // read objs
     meshes.push_back(ofMesh());
-    readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/sphere/sphere.obj", meshes.back());
+    //readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/sphere/sphere.obj", meshes.back());
     //readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/rod/rod.obj", meshes.back());
-    //readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/ground/ground.obj", meshes.back());
+    readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/ground/ground.obj", meshes.back());
 
     // initialize light
     ofSetSmoothLighting(true);
@@ -129,8 +132,8 @@ void ofApp::draw(){
     bottomWall.draw();
 
     ofSetColor(255, 255, 255);
-    ofTranslate(0.3f * pMin + 0.7f * pMax * PIXELS_PER_METER);
-    ofScale(4 * PIXELS_PER_METER, 4 * PIXELS_PER_METER, 4 * PIXELS_PER_METER);
+    ofTranslate(0.5f * pMin + 0.5f * pMax * PIXELS_PER_METER + ofVec3f(0, 100, 0));
+    ofScale(0.2 * PIXELS_PER_METER, 0.2 * PIXELS_PER_METER, 0.2 * PIXELS_PER_METER);
     meshes[0].draw();
     ofLoadIdentityMatrix();
 
