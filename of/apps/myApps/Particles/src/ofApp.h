@@ -5,11 +5,6 @@
 #include "ofMain.h"
 #include "RingBuffer.h"
 
-#define EXTENSION_SCENE 1
-
-
-#define N_BALLS 12
-//#define MAX_WAV_INSTANCES 64
 
 #define PIXELS_PER_METER 50.0
 
@@ -36,34 +31,6 @@ struct Material {
     ofColor color;
 };
 
-struct Sphere {
-    void setMaterial(const Material& m);
-    ofVec3f p;
-    ofVec3f v;
-    float m;
-    float r;
-    float rFactor;  // restitution factor
-    float yMod;
-    float pRatio;
-    ofColor color;
-};
-
-struct Spring {
-    Spring(int ballId1, int ballId2, float L, float k, float c)
-        : ballId1(ballId1), ballId2(ballId2), L(L), k(k), c(c) {}
-    int ballId1;
-    int ballId2;
-    float L;    // length
-    float k;    // spring constant
-    float c;    // damping coefficient
-};
-
-struct Collision {
-    Collision() {}
-    int id;
-    float t;
-};
-
 class ofApp : public ofBaseApp{
 public:
 	void setup() override;
@@ -84,27 +51,20 @@ public:
     void audioOut(float* output, int bufferSize, int nChannels) override;
 
 private:
-    int wallCollide(const Sphere& ball, float tMin, float* t);
-    void updateBallCollisions(int index, float tMin);
 
 private:
     ofLight pointLight;
     ofPlanePrimitive leftWall, rightWall, bottomWall, topWall, backWall;
 
-    ofVec3f pMin, pMax;                 // bounds on ball position
-    Sphere balls[N_BALLS];
-    vector<Spring> springs;
+    ofVec3f pMin, pMax;                 // scene bounds
+
+    vector<ofMesh> meshes;
 
     ofVec3f gravity;                    // acceleration due to gravity
     
     bool attract;
     ofVec3f attractPos;
-
-    float* ballCollisionTable;
-    Collision wallCollisionTable[N_BALLS];
-
-    // Each entry is the sample index that wav instance is currently being played at.  A negative
-    // value indicates a delay before that instance begins playing.
+    
     RingBuffer<float, CHANNELS * AUDIO_SAMPLE_RATE> audioBuffer;
     std::mutex audioBufferLock;
 

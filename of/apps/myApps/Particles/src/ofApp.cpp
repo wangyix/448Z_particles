@@ -1,4 +1,6 @@
 #include "ofApp.h"
+#include <iostream>
+#include <fstream>
 #include <assert.h>
 #include <algorithm>
 
@@ -11,133 +13,53 @@ static const Material materials[NUM_MATERIALS] = { Material(8940.f, 123.4f * 1e9
                                                    Material(1200.f, 2.4f * 1e9f, 0.37f, ofColor(255, 0, 255, 255)) };
 
 
-void Sphere::setMaterial(const Material& mat) {
-    m = (4.f / 3.f)*PI*r*r*r*mat.density;
-    yMod = mat.yMod;
-    pRatio = mat.pRatio;
-    color = mat.color;
+static void readObj(const string& fileName, ofMesh& mesh) {
+    cout << "Reading geometry data from " << fileName << endl;
+    ifstream file;
+    file.open(fileName, ios::in);
+    if (!file.is_open()) {
+        cout << "Failed to open " << fileName << endl;
+        return;
+    }
+    mesh.clear();
+    string line;
+    while (getline(file, line)) {
+        char c;
+        istringstream iss(line);
+        iss >> c;
+        if (c == '#') continue;
+        else if (c == 'v') {
+            ofVec3f v;
+            iss >> v.x >> v.y >> v.z;
+            mesh.addVertex(v);
+            mesh.addNormal(v.normalized());
+        } else if (c == 'f') {
+            int i1, i2, i3;
+            iss >> i1 >> i2 >> i3;
+            mesh.addTriangle(i1 - 1, i2 - 1, i3 - 1);
+        } else{
+            std::cout << "Warning: unrecognized line type " << c << endl;
+        }
+    }
+    file.close();
+    mesh.setMode(OF_PRIMITIVE_TRIANGLES);
 }
 
 //--------------------------------------------------------------
 void ofApp::setup(){
     windowResized(ofGetWidth(), ofGetHeight());
 
+    // read objs
+    meshes.push_back(ofMesh());
+    readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/sphere/sphere.obj", meshes.back());
+
     // initialize light
     ofSetSmoothLighting(true);
     pointLight.setDiffuseColor(ofFloatColor(.85, .85, .55));
     pointLight.setSpecularColor(ofFloatColor(1.f, 1.f, 1.f));
 
-    int nonRandomBalls = 0;
-
-#if EXTENSION_SCENE
-    const float BALL_RADIUS = 0.2f;
-    {
-        const ofVec3f tetrahedronVertices[4] = {
-            ofVec3f(1.f, 0.f, -1.f / sqrtf(2.f)),
-            ofVec3f(-1.f, 0.f, -1.f / sqrtf(2.f)),
-            ofVec3f(0.f, 1.f, 1.f / sqrtf(2.f)),
-            ofVec3f(0.f, -1.f, 1.f / sqrtf(2.f))
-        };
-        const float TETRAHEDRON_SCALE = 10.f * BALL_RADIUS;
-
-        ofVec3f tetraCenter = 0.3f * pMin + 0.7f * pMax;
-        for (int i = 0; i < 4; i++) {
-            balls[nonRandomBalls + i].r = BALL_RADIUS;
-            balls[nonRandomBalls + i].p = tetraCenter + TETRAHEDRON_SCALE * tetrahedronVertices[i];
-            balls[nonRandomBalls + i].v = ofVec3f(0.f, 0.f, 0.f);
-            balls[nonRandomBalls + i].rFactor = 0.7f;
-            balls[nonRandomBalls + i].setMaterial(materials[0]);
-        }
-        const float L = 2.f * TETRAHEDRON_SCALE;
-        const float FORCE_AT_ZERO_LENGTH = balls[nonRandomBalls].m * 800.f;
-        const float K = FORCE_AT_ZERO_LENGTH / L;
-        const float C = 400.f;
-        for (int i = 0; i < 4; i++) {
-            for (int j = i + 1; j < 4; j++) {
-                springs.emplace_back(nonRandomBalls + i, nonRandomBalls + j, L, K, C);
-            }
-        }
-        nonRandomBalls += 4;
-    }
-    {
-        const ofVec3f cubeVertices[8] = {
-            ofVec3f(-1.f, -1.f, -1.f),
-            ofVec3f(1.f, -1.f, -1.f),
-            ofVec3f(1.f, 1.f, -1.f),
-            ofVec3f(-1.f, 1.f, -1.f),
-            ofVec3f(-1.f, -1.f, 1.f),
-            ofVec3f(1.f, -1.f, 1.f),
-            ofVec3f(1.f, 1.f, 1.f),
-            ofVec3f(-1.f, 1.f, 1.f)
-        };
-        const int cubeSpringPairs[20][2] = {
-            { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
-            { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
-            { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 },
-            { 0, 2 }, { 4, 6 },
-            { 0, 5 }, { 5, 2 }, { 2, 7 }, { 7, 0 },
-            { 2, 4 }, { 1, 7 }
-        };
-        const float CUBE_SCALE = 10.f * BALL_RADIUS;
-
-        ofVec3f cubeCenter = 0.7f * pMin + 0.3f * pMax;
-        for (int i = 0; i < 8; i++) {
-            balls[nonRandomBalls + i].r = BALL_RADIUS;
-            balls[nonRandomBalls + i].p = cubeCenter + CUBE_SCALE * cubeVertices[i];
-            balls[nonRandomBalls + i].v = ofVec3f(0.f, 0.f, 0.f);
-            balls[nonRandomBalls + i].rFactor = 0.7f;
-            balls[nonRandomBalls + i].setMaterial(materials[0]);
-        }
-        const float FORCE_AT_ZERO_LENGTH = balls[nonRandomBalls].m * 800.f;
-        const float C = 400.f;
-        for (int i = 0; i < 20; i++) {
-            int ballId1 = nonRandomBalls + cubeSpringPairs[i][0];
-            int ballId2 = nonRandomBalls + cubeSpringPairs[i][1];
-            const Sphere& ball1 = balls[ballId1];
-            const Sphere& ball2 = balls[ballId2];
-            float L = (ball2.p - ball1.p).length();
-            float k = FORCE_AT_ZERO_LENGTH / L;
-            springs.emplace_back(ballId1, ballId2, L, k, C);
-        }
-        nonRandomBalls += 8;
-    }
-#endif
-
-    // initialize ball positions, velocities, rFactors to random values
-    const float MAX_SPEED = 10.f;
-    const float MIN_RADIUS = 0.15f;
-    const float MAX_RADIUS = 0.3f;
-    const float MIN_RFACTOR = 0.3f;
-    const float MAX_RFACTOR = 0.8f;
-    for (int i = nonRandomBalls; i < N_BALLS; i++) {
-        // random radius
-        balls[i].r = MIN_RADIUS + ofRandomuf() * (MAX_RADIUS - MIN_RADIUS);
-
-        // random starting position
-        balls[i].p.x = pMin.x + balls[i].r + ofRandomuf() * (pMax.x - pMin.x - 2.f*balls[i].r);
-        balls[i].p.y = pMin.y + balls[i].r + ofRandomuf() * (pMax.y - pMin.y - 2.f*balls[i].r);
-        balls[i].p.z = pMin.z + balls[i].r + ofRandomuf() * (pMax.z - pMin.z - 2.f*balls[i].r);
-
-        // random velocity (randomly sample unit sphere surface with uniform distribution)
-        float theta = TWO_PI * ofRandomuf();
-        float phi = acosf(2.f * ofRandomuf() - 1.f);
-        float speed = ofRandomuf() * MAX_SPEED;
-        balls[i].v.x = speed * sinf(phi) * cosf(theta);
-        balls[i].v.y = speed * sinf(phi) * sinf(theta);
-        balls[i].v.z = speed * cosf(phi);
-
-        balls[i].rFactor = MIN_RFACTOR + ofRandomuf() * (MAX_RFACTOR - MIN_RFACTOR);
-
-        // choose a material
-        int mi = min((int)(ofRandomuf() * NUM_MATERIALS), NUM_MATERIALS - 1);
-        balls[i].setMaterial(materials[mi]);
-    }
-
-
     gravity = ofVec3f(0.f, GRAVITY_MAG, 0.f);
     attract = false;
-    
-    ballCollisionTable = new float[N_BALLS * N_BALLS];
 
     listenPos = ofVec3f(0.5f * (pMin.x + pMax.x), 0.5f * (pMin.y + pMax.y), BOX_ZMAX);
 
@@ -146,120 +68,8 @@ void ofApp::setup(){
 }
 
 void ofApp::exit() {
-    delete[] ballCollisionTable;
 }
 
-
-enum WallId{ NONE = -1, XMIN = -2, XMAX = -3, YMIN = -4, YMAX = -5, ZMIN = -6, ZMAX = -7 };
-
-
-// will return smaller root
-static bool spheresCollide(const Sphere& ball1, const Sphere& ball2, float* t) {
-    ofVec3f cDiff = ball1.p - ball2.p;
-    ofVec3f vDiff = ball1.v - ball2.v;
-    float rSum = ball1.r + ball2.r;
-    float a = vDiff.lengthSquared();
-    float b_over_2 = cDiff.dot(vDiff);
-    float c = cDiff.lengthSquared() - rSum*rSum;
-    float D_over_4 = b_over_2*b_over_2 - a*c;    
-    if (D_over_4 < 0.f) {
-        return false;
-    }
-    if (b_over_2 > 0.f) {
-        float z = -b_over_2 - sqrtf(D_over_4);
-        *t = z / a;
-    } else {
-        float z = -b_over_2 + sqrtf(D_over_4);
-        *t = c / z;
-    }
-    return true;
-}
-
-// will update t to time of first wall collision, and update wallId to that wall
-int ofApp::wallCollide(const Sphere& ball, float tMin, float* t) {
-    *t = positiveInfinity;
-    int id = NONE;
-    if (ball.v.x > 0.f) {
-        float tx = (pMax.x - ball.r - ball.p.x) / ball.v.x;
-        if (tx >= tMin && tx < *t) {
-            *t = tx;
-            id = XMAX;
-        }
-    } else {
-        float tx = (pMin.x + ball.r - ball.p.x) / ball.v.x;
-        if (tx >= tMin && tx < *t) {
-            *t = tx;
-            id = XMIN;
-        }
-    }
-    if (ball.v.y > 0.f) {
-        float ty = (pMax.y - ball.r - ball.p.y) / ball.v.y;
-        if (ty >= tMin && ty < *t) {
-            *t = ty;
-            id = YMAX;
-        }
-    } else {
-        float ty = (pMin.y + ball.r - ball.p.y) / ball.v.y;
-        if (ty >= tMin && ty < *t) {
-            *t = ty;
-            id = YMIN;
-        }
-    }
-    if (ball.v.z > 0.f) {
-        float tz = (pMax.z - ball.r - ball.p.z) / ball.v.z;
-        if (tz >= tMin && tz < *t) {
-            *t = tz;
-            id = ZMAX;
-        }
-    } else {
-        float tz = (pMin.z + ball.r - ball.p.z) / ball.v.z;
-        if (tz >= tMin && tz < *t) {
-            *t = tz;
-            id = ZMIN;
-        }
-    }
-    return id;
-}
-
-static float computeTau(float r1Inv, float m1Inv, float v1, float E1,
-                        float r2Inv, float m2Inv, float v2, float E2, float V) {
-    float r = 1.f / (r1Inv + r2Inv);
-    float m = 1.f / (m1Inv + m2Inv);
-    float E = 1.f / ((1 - v1*v1) / E1 + (1 - v2*v2) / E2);
-    return 2.87f * pow((m*m / (r*E*E*V)), 0.2);
-}
-
-static float computeSConst(const Sphere& ball, const ofVec3f& listenPos, float tau, const ofVec3f& VDir, float J) {
-    ofVec3f toListener = listenPos - ball.p;
-    float dist = toListener.length();
-    ofVec3f toListenerDir = toListener / dist;
-
-    float pConst = 1.2f * ball.r * ball.r * ball.r * VDir.dot(toListener) / (2.f * 330.f * dist);
-    float d2Vdt2Const = PI / (2.f * ball.m * tau) * abs(J);
-    float SConst = -12.f / (tau * tau);
-
-    float combinedConst = pConst * d2Vdt2Const * SConst;
-    return combinedConst;
-}
-/*
-static void add(float* dst, float* src, int size, float atten) {
-    for (int i = 0; i < size; i++) {
-        dst[i] += src[i] * atten;
-    }
-}
-
-static void blur(float* buffer, int size) {
-    float prev = (buffer[0] + buffer[1]) / 3.f;
-    for (int i = 1; i < size - 1; i++) {
-        float curr = (buffer[i - 1] + buffer[i] + buffer[i + 1]) / 3.f;
-        buffer[i - 1] = prev;
-        prev = curr;
-    }
-    float last = (buffer[size - 2] + buffer[size - 1]) / 3.f;
-    buffer[size - 2] = prev;
-    buffer[size - 1] = last;
-}
-*/
 static int secondsToSamples(float t) {
     return ((int)(t * AUDIO_SAMPLE_RATE)) * CHANNELS;
 }
@@ -268,195 +78,13 @@ static int secondsToSamples(float t) {
 void ofApp::update(){
     float dt = ofGetLastFrameTime();
     
-    // update ball velocities with gravity, spring, and cursor forces
-    for (int i = 0; i < N_BALLS; i++) {
-        balls[i].v += dt * gravity;
-    }
-    for (int i = 0; i < springs.size(); i++) {
-        const Spring& s = springs[i];
-        Sphere& ball1 = balls[s.ballId1];
-        Sphere& ball2 = balls[s.ballId2];
-
-        ofVec3f dir = ball2.p - ball1.p;
-        float l = dir.length();
-        dir /= l;
-        float v = (ball2.v - ball1.v).dot(dir);
-        ofVec3f F1 = (s.k * (l - s.L) + s.c * v)* dir;
-        if (F1.lengthSquared() > 0.001f) {
-            printf("");
-        }
-        ofVec3f F2 = -F1;
-        ball1.v += dt * (F1 / ball1.m);
-        ball2.v += dt * (F2 / ball2.m);
-    }
-    if (attract) {
-        for (int i = 0; i < N_BALLS; i++) {
-            ofVec3f toAttractPos = attractPos - balls[i].p;
-            float dSq = toAttractPos.lengthSquared();
-            ofVec3f accel = (MOUSE_CURSOR_MASS / dSq) * toAttractPos;    // falls off as R
-            balls[i].v += dt * accel;
-        }
-    }
-
-    // compute collision times between all object pairs
-    for (int i = 0; i < N_BALLS; i++) {
-        wallCollisionTable[i].id = wallCollide(balls[i], 0.f, &wallCollisionTable[i].t);
-        for (int j = i + 1; j < N_BALLS; j++) {
-            float t = -1.f;
-            spheresCollide(balls[i], balls[j], &t);
-            ballCollisionTable[i * N_BALLS + j] = t;
-            //ballCollisionTable[j * N_BALLS + i] = t;
-        }
-    }
-    
     float tempAudioBuffer[CHANNELS * AUDIO_SAMPLE_RATE];
     memset(tempAudioBuffer, 0, CHANNELS * AUDIO_SAMPLE_RATE * sizeof(float));
     int audioStart = CHANNELS * AUDIO_SAMPLE_RATE;
     int audioEnd = -1;
 
-    float tAt = 0.f;
-    while (true) {
-        // find the ball with the nearest next collision (occurs after tAt)
-        int ci = -1;
-        Collision collision;
-        collision.t = positiveInfinity;
-        collision.id = NONE;
-        for (int i = 0; i < N_BALLS; i++) {
-            if (wallCollisionTable[i].t >= tAt && wallCollisionTable[i].t < collision.t) {
-                ci = i;
-                collision = wallCollisionTable[i];
-            }
-            for (int j = i + 1; j < N_BALLS; j++) {
-                if (ballCollisionTable[i * N_BALLS + j] >= tAt && ballCollisionTable[i * N_BALLS + j] < collision.t) {
-                    ci = i;
-                    collision.t = ballCollisionTable[i * N_BALLS + j];
-                    collision.id = j;
-                }
-            }
-        }
-        if (collision.t >= dt) {
-            break;
-        }
-        assert(collision.t >= tAt);
-        assert(collision.id != NONE);
-
-        float tau;
-        float SConst;
-        if (collision.id < -1) {            // wall collision
-            float vn;
-            Sphere& cBall = balls[ci];
-            ofVec3f vNext = cBall.v;
-            switch (collision.id) {
-            case XMIN:
-            case XMAX:
-                vNext.x *= -cBall.rFactor;
-                vn = abs(cBall.v.x);
-                break;
-            case YMIN:
-            case YMAX:
-                vNext.y *= -cBall.rFactor;
-                vn = abs(cBall.v.y);
-                break;
-            case ZMIN:
-            case ZMAX:
-                vNext.z *= -cBall.rFactor;
-                vn = abs(cBall.v.z);
-                break;
-            }
-            ofVec3f impulse = (vNext - cBall.v) * cBall.m;
-            float J = impulse.length();
-            ofVec3f VDir = impulse / J;
-
-            cBall.p += collision.t * (cBall.v - vNext); // move it to contact point, then backstep in time
-            cBall.v = vNext;
-
-            // update collision tables
-            updateBallCollisions(ci, collision.t);
-
-            // compute tau, SConst
-            tau = computeTau(1.f / cBall.r, 1.f / cBall.m, cBall.pRatio, cBall.yMod,
-                             0.f, 0.f, materials[0].pRatio, materials[0].yMod, vn);
-            SConst = computeSConst(cBall, listenPos, tau, VDir, J);
-
-        } else {    //if (collision.id >= 0) {     // ball collision
-            assert(ci != collision.id);
-
-            int ci2 = collision.id;
-            Sphere& cBall = balls[ci];
-            Sphere& cBall2 = balls[ci2];
-
-            ofVec3f p1 = cBall.p + collision.t * cBall.v;
-            ofVec3f p2 = cBall2.p + collision.t * cBall2.v;
-            ofVec3f n = (p1 - p2).normalized();
-
-            float eps = 0.5f * (cBall.rFactor + cBall2.rFactor);
-
-            float vn = (cBall2.v - cBall.v).dot(n);
-            float J = (1.f + eps)*vn / (1.f / cBall.m + 1.f / cBall2.m);
-            ofVec3f vNext = cBall.v + J / cBall.m * n;
-            ofVec3f vNext2 = cBall2.v - J / cBall2.m * n;
-
-            cBall.p += collision.t * (cBall.v - vNext);     // move to contact pt, then backstep
-            cBall2.p += collision.t * (cBall2.v - vNext2);
-            cBall.v = vNext;
-            cBall2.v = vNext2;
-
-            // update collision tables
-            updateBallCollisions(ci, collision.t);
-            updateBallCollisions(ci2, collision.t);
-
-            // compute tau, SConst
-            tau = computeTau(1.f / cBall.r, 1.f / cBall.m, cBall.pRatio, cBall.yMod,
-                             1.f / cBall2.r, 1.f / cBall2.m, cBall2.pRatio, cBall2.yMod, abs(vn));
-            float SConst1 = computeSConst(cBall, listenPos, tau, n, abs(J));
-            float SConst2 = computeSConst(cBall2, listenPos, tau, -n, abs(J));
-            SConst = SConst1 + SConst2;
-        }
-        
-        SConst *= 0.0002f;
-
-        // add audio samples to temp audio buffer
-        int i = secondsToSamples(collision.t);
-        if (i < audioStart) {
-            audioStart = i;
-        }
-        for (float t = 0.f; t < tau; t += 1.f / AUDIO_SAMPLE_RATE) {
-            float sample = SConst * (t - 0.5f * tau) * sin(PI*t / tau);
-            for (int j = 0; j < CHANNELS; j++) {
-                tempAudioBuffer[i++] += sample;
-            }
-        }
-        if (i > audioEnd) {
-            audioEnd = i;
-        }
-                
-        tAt = collision.t;
-    }
-
     // process and add audio samples if any were produced this frame
     if (audioEnd - audioStart > 0) {
-        /*
-        float reverbAudioBuffer[CHANNELS * AUDIO_SAMPLE_RATE];
-        memset(reverbAudioBuffer, 0, CHANNELS * AUDIO_SAMPLE_RATE * sizeof(float));
-
-        // add delayed, attenuated copies of the original audio to the reverb audio buffer
-        add(&reverbAudioBuffer[audioStart + secondsToSamples(0.046f)], &tempAudioBuffer[audioStart], audioEnd - audioStart, 0.5f);
-        add(&reverbAudioBuffer[audioStart + secondsToSamples(0.082f)], &tempAudioBuffer[audioStart], audioEnd - audioStart, 0.25f);
-        add(&reverbAudioBuffer[audioStart + secondsToSamples(0.116f)], &tempAudioBuffer[audioStart], audioEnd - audioStart, 0.125f);
-        add(&reverbAudioBuffer[audioStart + secondsToSamples(0.2f)], &tempAudioBuffer[audioStart], audioEnd - audioStart, 0.0625f);
-        
-        // blur the reverb audio buffer
-        int reverbStart = audioStart + secondsToSamples(0.046f);
-        int reverbEnd = audioEnd + secondsToSamples(0.2f);
-        blur(&reverbAudioBuffer[reverbStart], reverbEnd - reverbStart);
-        blur(&reverbAudioBuffer[reverbStart], reverbEnd - reverbStart);
-        blur(&reverbAudioBuffer[reverbStart], reverbEnd - reverbStart);
-        
-        // add the original unattenuated audio to the reverb audio buffer
-        add(&reverbAudioBuffer[audioStart], &tempAudioBuffer[audioStart], audioEnd - audioStart, 1.f);
-        */
-
-        // add samples from the reverb audio buffer to the audio ring buffer
         audioBufferLock.lock();
         int additionalCapcityNeeded = audioEnd - audioBuffer.size();
         if (additionalCapcityNeeded > 0) {
@@ -470,31 +98,12 @@ void ofApp::update(){
         }
         audioBufferLock.unlock();
     }
-
-    // update all ball positions to end of frame
-    for (int i = 0; i < N_BALLS; i++) {
-        balls[i].p += dt * balls[i].v;
-    }
-}
-
-void ofApp::updateBallCollisions(int index, float tMin) {
-    wallCollisionTable[index].id = wallCollide(balls[index], tMin, &wallCollisionTable[index].t);
-    for (int i = 0; i < index; i++) {
-        float t = -1.f;
-        spheresCollide(balls[index], balls[i], &t);
-        ballCollisionTable[i * N_BALLS + index] = t;
-    }
-    for (int j = index + 1; j < N_BALLS; j++) {
-        float t = -1.f;
-        spheresCollide(balls[index], balls[j], &t);
-        ballCollisionTable[index * N_BALLS + j] = t;
-    }
 }
 
 //--------------------------------------------------------------
 void ofApp::draw(){
     ofBackground(0);
-
+    
     ofEnableLighting();
     pointLight.enable();
 
@@ -507,37 +116,11 @@ void ofApp::draw(){
     topWall.draw();
     bottomWall.draw();
 
-    // draw balls
-    ofIcoSpherePrimitive sphere(0.f, 2);
-    for (int i = 0; i < N_BALLS; i++) {
-        sphere.setRadius(balls[i].r * PIXELS_PER_METER);
-        sphere.setPosition(balls[i].p * PIXELS_PER_METER);
-        ofSetColor(balls[i].color);
-        sphere.draw();
-    }
-    // draw springs
-    for (int i = 0; i < springs.size(); i++) {
-        const Spring& s = springs[i];
-        const Sphere& ball1 = balls[s.ballId1];
-        const Sphere& ball2 = balls[s.ballId2];
-        
-        ofVec3f targetDir = ball2.p - ball1.p;
-        float l = targetDir.length();
-        targetDir /= l;
-
-        ofCylinderPrimitive cylinder;
-        cylinder.setPosition(0.f, 0.f, 0.f);
-        cylinder.set(0.1f * PIXELS_PER_METER, l * PIXELS_PER_METER);
-
-        ofVec3f cylDir = ofVec3f(0.f, 1.f, 0.f);
-        ofVec3f rotateAxis = cylDir.crossed(targetDir);
-        float degreesRotate = acosf(cylDir.dot(targetDir)) / PI * 180.f;
-
-        cylinder.rotate(degreesRotate, rotateAxis);
-        cylinder.setPosition(0.5f * (ball1.p + ball2.p) * PIXELS_PER_METER);
-        ofSetColor(0, 200, 200);
-        cylinder.draw();
-    }
+    ofSetColor(255, 255, 255);
+    ofTranslate(0.3f * pMin + 0.7f * pMax * PIXELS_PER_METER);
+    ofScale(PIXELS_PER_METER, PIXELS_PER_METER, PIXELS_PER_METER);
+    meshes[0].draw();
+    ofLoadIdentityMatrix();
 
     ofDisableLighting();
     ofSetColor(255, 255, 255);
@@ -612,18 +195,9 @@ void ofApp::windowResized(int w, int h){
     pMin.z = BOX_ZMIN;
     pMax.z = BOX_ZMAX;
 
-    for (int i = 0; i < N_BALLS; i++) {
-        float r = balls[i].r;
-        balls[i].p.x = std::max(std::min(balls[i].p.x, pMax.x - r), pMin.x + r);
-        balls[i].p.y = std::max(std::min(balls[i].p.y, pMax.y - r), pMin.y + r);
-        balls[i].p.z = std::max(std::min(balls[i].p.z, pMax.z - r), pMin.z + r);
-    }
-
-
     pointLight.setPosition(w / 2, 10.f, 0.5f*(BOX_ZMIN + BOX_ZMAX)*PIXELS_PER_METER);
 
     // initialize walls
-
     leftWall = ofPlanePrimitive((BOX_ZMAX - BOX_ZMIN)*PIXELS_PER_METER, h, 8, 8);
     rightWall = leftWall;
     leftWall.setPosition(0.f, h / 2, 0.5f*(BOX_ZMIN + BOX_ZMAX)*PIXELS_PER_METER);
