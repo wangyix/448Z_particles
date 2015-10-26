@@ -7,6 +7,9 @@
     <ClCompile Include="src\main.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="src\RigidBody.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="src">
@@ -18,6 +21,9 @@
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="src\RingBuffer.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\RigidBody.h">
       <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>

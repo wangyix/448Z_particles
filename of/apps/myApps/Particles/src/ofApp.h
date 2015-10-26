@@ -4,7 +4,7 @@
 
 #include "ofMain.h"
 #include "RingBuffer.h"
-
+#include "RigidBody.h"
 
 #define PIXELS_PER_METER 50.0
 
@@ -22,14 +22,6 @@
 
 #define MOUSE_CURSOR_MASS 80.0    // how attractive the cursor is when held down; unit is abitrary
 
-struct Material {
-    Material(float density, float yMod, float pRatio, const ofColor& color)
-        : density(density), yMod(yMod), pRatio(pRatio), color(color) {}
-    float density;
-    float yMod;
-    float pRatio;
-    ofColor color;
-};
 
 class ofApp : public ofBaseApp{
 public:
@@ -58,7 +50,7 @@ private:
 
     ofVec3f pMin, pMax;                 // scene bounds
 
-    vector<ofMesh> meshes;
+    vector<RigidBody> bodies;
 
     ofVec3f gravity;                    // acceleration due to gravity
     

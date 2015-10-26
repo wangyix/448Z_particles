@@ -13,7 +13,7 @@ static const Material materials[NUM_MATERIALS] = { Material(8940.f, 123.4f * 1e9
                                                    Material(1200.f, 2.4f * 1e9f, 0.37f, ofColor(255, 0, 255, 255)) };
 
 
-static void readObj(const string& fileName, ofMesh& mesh) {
+static void readObj(const string& fileName, ofMesh* mesh) {
     cout << "Reading geometry data from " << fileName << endl;
     ifstream file;
     file.open(fileName, ios::in);
@@ -21,7 +21,7 @@ static void readObj(const string& fileName, ofMesh& mesh) {
         cout << "Failed to open " << fileName << endl;
         return;
     }
-    mesh.clear();
+    mesh->clear();
     vector<ofVec3f> normals;
     string line;
     while (getline(file, line)) {
@@ -32,20 +32,20 @@ static void readObj(const string& fileName, ofMesh& mesh) {
         else if (c == 'v') {
             ofVec3f v;
             iss >> v.x >> v.y >> v.z;
-            mesh.addVertex(v);
+            mesh->addVertex(v);
             normals.emplace_back(0.f, 0.f, 0.f);
         } else if (c == 'f') {
             int indices[3];
             iss >> indices[0] >> indices[1] >> indices[2];
             ofVec3f v[3];
             for (int i = 0; i < 3; i++) {
-                v[i] = mesh.getVertex(--indices[i]);
+                v[i] = mesh->getVertex(--indices[i]);
             }
             ofVec3f n = (v[1] - v[0]).crossed(v[2] - v[0]).normalized();
             for (int i = 0; i < 3; i++) {
                 normals[indices[i]] += n;
             }
-            mesh.addTriangle(indices[0], indices[1], indices[2]);
+            mesh->addTriangle(indices[0], indices[1], indices[2]);
         } else{
             std::cout << "Warning: unrecognized line type " << c << endl;
         }
@@ -54,8 +54,8 @@ static void readObj(const string& fileName, ofMesh& mesh) {
     for (int i = 0; i < normals.size(); i++) {
         normals[i].normalize();
     }
-    mesh.addNormals(normals);
-    mesh.setMode(OF_PRIMITIVE_TRIANGLES);
+    mesh->addNormals(normals);
+    mesh->setMode(OF_PRIMITIVE_TRIANGLES);
 }
 
 //--------------------------------------------------------------
@@ -63,10 +63,12 @@ void ofApp::setup(){
     windowResized(ofGetWidth(), ofGetHeight());
 
     // read objs
-    meshes.push_back(ofMesh());
+    ofMesh mesh;
     //readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/sphere/sphere.obj", meshes.back());
     //readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/rod/rod.obj", meshes.back());
-    readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/ground/ground.obj", meshes.back());
+    readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/ground/ground.obj", &mesh);
+    
+    bodies.push_back(RigidBody(mesh, materials[0]));
 
     // initialize light
     ofSetSmoothLighting(true);
@@ -132,10 +134,13 @@ void ofApp::draw(){
     bottomWall.draw();
 
     ofSetColor(255, 255, 255);
-    ofTranslate(0.5f * pMin + 0.5f * pMax * PIXELS_PER_METER + ofVec3f(0, 100, 0));
-    ofScale(0.2 * PIXELS_PER_METER, 0.2 * PIXELS_PER_METER, 0.2 * PIXELS_PER_METER);
-    meshes[0].draw();
-    ofLoadIdentityMatrix();
+    for (int i = 0; i < bodies.size(); i++) {
+        ofLoadIdentityMatrix();
+        ofTranslate(0.5f * pMin + 0.5f * pMax * PIXELS_PER_METER + ofVec3f(0, 100, 0));
+        ofScale(0.2 * PIXELS_PER_METER, 0.2 * PIXELS_PER_METER, 0.2 * PIXELS_PER_METER);
+        //meshes[0].draw();
+        ofLoadIdentityMatrix();
+    }
 
     ofDisableLighting();
     ofSetColor(255, 255, 255);

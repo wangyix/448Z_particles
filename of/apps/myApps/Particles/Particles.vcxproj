@@ -92,9 +92,11 @@
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\ofApp.cpp" />
+    <ClCompile Include="src\RigidBody.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\ofApp.h" />
+    <ClInclude Include="src\RigidBody.h" />
     <ClInclude Include="src\RingBuffer.h" />
   </ItemGroup>
   <ItemGroup>
