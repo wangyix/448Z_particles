@@ -14,7 +14,7 @@ struct Material {
 
 struct RigidBody {
 public:
-    RigidBody(const ofMesh& triMesh, const Material& material);
+    RigidBody(const ofMesh& triMesh, const Material& material, float scale=1.f);
     
     void scale(float s);
 public:

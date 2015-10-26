@@ -17,6 +17,7 @@ static float signedVolume(const ofMeshFace& tri) {
 // computes integral x^p*y^q*z^r dxdydz over the tetrahedron formed by a face and the
 // origin, where two of p,q,r are 0. The param "coord" determines which of x,y,z has the nonzero
 // exponent (0=x, 1=y, 2=z), and "pow" determines that exponent, which can be 0, 1, or 2.
+// http://research.microsoft.com/en-us/um/people/chazhang/publications/icip01_ChaZhang.pdf
 static float signedMoment(const ofMeshFace& tri, int coord, int pow) {
     assert(0 <= coord && coord < 3);
     float x[3], y[3], z[3];
@@ -25,12 +26,12 @@ static float signedMoment(const ofMeshFace& tri, int coord, int pow) {
         y[i] = tri.getVertex(i)[(coord + 1) % 3];
         z[i] = tri.getVertex(i)[(coord + 2) % 3];
     }
-    float M000 = (- x[2] * y[1] * z[0]
-                  + x[1] * y[2] * z[0]
-                  + x[2] * y[0] * z[1]
-                  - x[0] * y[2] * z[1]
-                  - x[1] * y[0] * z[2] 
-                  + x[0] * y[1] * z[2]) / 6.f;
+    float M000 = (-x[2] * y[1] * z[0]
+        + x[1] * y[2] * z[0]
+        + x[2] * y[0] * z[1]
+        - x[0] * y[2] * z[1]
+        - x[1] * y[0] * z[2]
+        + x[0] * y[1] * z[2]) / 6.f;
     switch (pow) {
     case 0:
         return M000;    // this is just the signed volume of the tetrahedron
@@ -39,9 +40,9 @@ static float signedMoment(const ofMeshFace& tri, int coord, int pow) {
         return 0.25f * (x[0] + x[1] + x[2]) * M000;
         break;
     case 2:
-        return 0.1f * (x[0]*x[0] + x[1]*x[1] + x[2]*x[2]
-                     + x[0]*x[1] + x[1]*x[2] + x[2]*x[0])
-               * M000;
+        return 0.1f * (x[0] * x[0] + x[1] * x[1] + x[2] * x[2]
+            + x[0] * x[1] + x[1] * x[2] + x[2] * x[0])
+            * M000;
         break;
     default:
         assert(false);
@@ -52,8 +53,8 @@ static float signedMoment(const ofMeshFace& tri, int coord, int pow) {
 // computes integrals x^p*y^q*z^r dxdydz over a face tetrahedron where p+q+r=2.
 // http://www.geometrictools.com/Documentation/PolyhedralMassProperties.pdf
 static void signedMoment2(const ofMeshFace& tri,
-    float* M,
-    float* Mx, float* My, float* Mz,
+    //float* M,
+    //float* Mx, float* My, float* Mz,
     float* Mxx, float* Myy, float* Mzz,
     float* Mxy, float* Myz, float* Mxz) {
     ofVec3f V[3];
@@ -84,10 +85,10 @@ static void signedMoment2(const ofMeshFace& tri,
             g[i][w] = f2[w] + wi*(f1[w] + wi);
         }
     }
-    *M = (delta[0] / 6.f) * f1[X];
-    *Mx = 0.5f * (delta[0] / 12.f) * f2[X];
-    *My = 0.5f * (delta[1] / 12.f) * f2[Y];
-    *Mz = 0.5f * (delta[2] / 12.f) * f2[Z];
+    //*M = (delta[0] / 6.f) * f1[X];
+    //*Mx = 0.5f * (delta[0] / 12.f) * f2[X];
+    //*My = 0.5f * (delta[1] / 12.f) * f2[Y];
+    //*Mz = 0.5f * (delta[2] / 12.f) * f2[Z];
     *Mxx = (1.f / 3.f) * (delta[0] / 20.f) * f3[X];
     *Myy = (1.f / 3.f) * (delta[1] / 20.f) * f3[Y];
     *Mzz = (1.f / 3.f) * (delta[2] / 20.f) * f3[Z];
@@ -96,66 +97,63 @@ static void signedMoment2(const ofMeshFace& tri,
     *Mxz = 0.5f * (delta[2] / 60.f) * (V[0].x*g[0][Z] + V[1].x*g[1][Z] + V[2].x*g[2][Z]);
 }
 
-RigidBody::RigidBody(const ofMesh& triMesh, const Material& material)
+RigidBody::RigidBody(const ofMesh& triMesh, const Material& material, float scale)
     : mesh(triMesh),
     material(material),
     x(0.f, 0.f, 0.f),
     P(0.f, 0.f, 0.f),
     L(0.f, 0.f, 0.f) {
 
-
-    // TEST
+    // scale mesh points
+    //if (scale != 1.f) {
     for (int i = 0; i < mesh.getNumVertices(); i++) {
-        mesh.setVertex(i, mesh.getVertex(i) + ofVec3f(10.f, 5.f, 2.f));
+        mesh.setVertex(i, scale * mesh.getVertex(i));
+    }
+    //}
+
+    // compute zeroth and first order moments
+    float M = 0.f;
+    float Mx = 0.f, My = 0.f, Mz = 0.f;
+    const vector<ofMeshFace>* triangles = &mesh.getUniqueFaces();
+    for (const ofMeshFace& tri : *triangles) {
+        M += signedMoment(tri, 0, 0);
+        Mx += signedMoment(tri, 0, 1);
+        My += signedMoment(tri, 1, 1);
+        Mz += signedMoment(tri, 2, 1);
     }
 
+    m = material.density * abs(M);          // mass
+    ofVec3f R = ofVec3f(Mx, My, Mz) / M;    // center of mass
 
-
-    vector<ofMeshFace> triangles = mesh.getUniqueFaces();
-
-    // compute volume and center of mass of body
-    float signedVolume = 0.f;
-    ofVec3f centerOfMass = ofVec3f(0.f, 0.f, 0.f);
-    float Hxx = 0.f, Hyy = 0.f, Hzz = 0.f;
-    for (const ofMeshFace& tri : triangles) {
-        signedVolume += signedMoment(tri, 0, 0);
-        for (int i = 0; i < 3; i++) {
-            centerOfMass[i] += signedMoment(tri, i, 1);
-        }
-        Hxx += signedMoment(tri, 0, 2);
-        Hyy += signedMoment(tri, 1, 2);
-        Hzz += signedMoment(tri, 2, 2);
-    }
-    centerOfMass /= signedVolume;
-
-    // mass of body
-    m = abs(signedVolume) * material.density;
-
-    /*// center mesh at center of mass
+    // move mesh so its center of mass is at origin
     for (int i = 0; i < mesh.getNumVertices(); i++) {
-        mesh.setVertex(i, mesh.getVertex(i) - centerOfMass);
+        mesh.setVertex(i, mesh.getVertex(i) - R);
     }
-    triangles = mesh.getUniqueFaces();
-    */
-    // compute IBody = density * integral (|r|^2*I - r*r^T) dxdydz
-    float V = 0.f;
-    float Ix = 0.f, Iy = 0.f, Iz = 0.f;
-    float Ixx = 0.f, Iyy = 0.f, Izz = 0.f;
-    float Ixy = 0.f, Iyz = 0.f, Ixz = 0.f;
-    for (const ofMeshFace& tri : triangles) {
-        float M, Mx, My, Mz, Mxx, Myy, Mzz, Mxy, Myz, Mxz;
-        signedMoment2(tri, &M, &Mx, &My, &Mz, &Mxx, &Myy, &Mzz, &Mxy, &Myz, &Mxz);
-        V += M;
-        Ix += Mx, Iy += My, Iz += Mz;
-        Ixx += Mxx, Iyy += Myy, Izz += Mzz;
-        Ixy += Mxy, Iyz += Myz, Ixz += Mxz;
+    triangles = &mesh.getUniqueFaces();
+
+    // compute second-order moments
+    float Mxx = 0.f, Myy = 0.f, Mzz = 0.f;
+    float Mxy = 0.f, Myz = 0.f, Mxz = 0.f;
+    for (const ofMeshFace& tri : *triangles) {
+        float mxx, myy, mzz, mxy, myz, mxz;
+        signedMoment2(tri, &mxx, &myy, &mzz, &mxy, &myz, &mxz);
+        Mxx += mxx, Myy += myy, Mzz += mzz;
+        Mxy += mxy, Myz += myz, Mxz += mxz;
     }
 
-    float error1 = signedVolume - V;
-    ofVec3f error2 = centerOfMass - ofVec3f(Ix, Iy, Iz)/V;
-    ofVec3f error3 = ofVec3f(Hxx - Ixx, Hyy - Iyy, Hzz - Izz);
+    float Ixx = material.density * (Myy + Mzz);
+    float Iyy = material.density * (Mzz + Mxx);
+    float Izz = material.density * (Mxx + Myy);
+    float Ixy = material.density * Mxy;
+    float Iyz = material.density * Myz;
+    float Ixz = material.density * Mxz;
+    IBody = ofMatrix3x3(Ixx, -Ixy, -Ixz,    // moment of inertia
+                        -Ixy, Iyy, -Iyz,
+                        -Ixz, -Iyz, Izz);
+    IBodyInv = IBody;
+    IBodyInv.invert();
 
-    printf("");
+
 }
 
 void RigidBody::scale(float s) {
