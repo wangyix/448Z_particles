@@ -105,11 +105,11 @@ RigidBody::RigidBody(const ofMesh& triMesh, const Material& material, float scal
     L(0.f, 0.f, 0.f) {
 
     // scale mesh points
-    //if (scale != 1.f) {
-    for (int i = 0; i < mesh.getNumVertices(); i++) {
-        mesh.setVertex(i, scale * mesh.getVertex(i));
+    if (scale != 1.f) {
+        for (int i = 0; i < mesh.getNumVertices(); i++) {
+            mesh.setVertex(i, scale * mesh.getVertex(i));
+        }
     }
-    //}
 
     // compute zeroth and first order moments
     float M = 0.f;
@@ -153,9 +153,5 @@ RigidBody::RigidBody(const ofMesh& triMesh, const Material& material, float scal
     IBodyInv = IBody;
     IBodyInv.invert();
 
-
-}
-
-void RigidBody::scale(float s) {
 
 }
