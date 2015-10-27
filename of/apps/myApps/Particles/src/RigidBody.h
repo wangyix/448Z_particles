@@ -18,6 +18,7 @@ struct RigidBody {
 public:
     RigidBody(const string& fileName, const Material& material, float scale=1.f);
 
+    void rotate(float rad, const ofVec3f& axis);
     void step(float dt);
 
 public:

@@ -29,6 +29,8 @@ void ofApp::setup(){
     //bodies.emplace_back(rodObjFileName, materials[0], 40.f);
     bodies.emplace_back(groundObjFileName, materials[0], 0.2f);
     bodies[0].x = 0.5f * (pMin + pMax) + ofVec3f(0.f, 2.f, 0.f);
+    bodies[0].rotate(PI / 6.f, ofVec3f(0.f, 0.f, 1.f));
+    //bodies[0].rotate(-PI / 6.f, ofVec3f(1.f, 0.f, 0.f));
 
     // initialize light
     ofSetSmoothLighting(true);
@@ -41,7 +43,7 @@ void ofApp::setup(){
     listenPos = ofVec3f(0.5f * (pMin.x + pMax.x), 0.5f * (pMin.y + pMax.y), BOX_ZMAX);
 
     ofSoundStreamSetup(CHANNELS, 0, AUDIO_SAMPLE_RATE, 256, 4);
-    //ofSetFrameRate(60);
+    ofSetFrameRate(60);
 }
 
 //--------------------------------------------------------------
@@ -96,8 +98,11 @@ int ofApp::particleCollideWall(const ofVec3f& x, const ofVec3f& v, float tMax, f
     return id;
 }
 
+vector<ofVec3f> collisions;
+
 //--------------------------------------------------------------
 void ofApp::update(){
+//if (!collisions.empty()) { return; }
     float dt = ofGetLastFrameTime();
     
     // apply non-rotational forces to bodies
@@ -105,6 +110,12 @@ void ofApp::update(){
         body.v += gravity * dt;
         body.P = body.m * body.v;
     }
+static float count = 0.f;
+count += dt;
+if (count > 1.f) {
+    count = 0.f;
+    collisions.clear();
+}
 
     // compute collisions of vertices against walls
     for (RigidBody& body : bodies) {
@@ -112,9 +123,11 @@ void ofApp::update(){
 
         float dtProcessed = 0.f;
         while (dtProcessed < dt) {
-
-            ofVec3f ri_c;        // ri of the vertex that collides
-            float dt_c = dt;     // collision will occur dt_c from now
+ofVec3f riBody_c;
+ofVec3f xi_c;
+            ofVec3f ri_c;                               // ri of the vertex that collides
+            ofVec3f vi_c;
+            float dt_c = dt - dtProcessed;  // collision will occur dt_c from now
             int wallId = NONE;
 
             for (int i = 0; i < body.mesh.getNumVertices(); i++) {
@@ -125,9 +138,12 @@ void ofApp::update(){
                 float t;
                 int id = particleCollideWall(xi, vi, dt - dtProcessed, &t);
                 if (id != NONE && t < dt_c) {
+riBody_c = body.mesh.getVertex(i);
+xi_c = xi;
                     dt_c = t;
                     wallId = id;
                     ri_c = ri;
+                    vi_c = vi;
                 }
             }
             assert(dt_c > 0.f);
@@ -135,37 +151,44 @@ void ofApp::update(){
 
             // compute impulse imparted by collision at this vertex, if any
             // accumulate effect of impulse into dP, dL
-            ofVec3f j;
+            ofVec3f n;
             switch (wallId) {
             case XMIN:
-                j = ofVec3f(1.f, 0.f, 0.f);
+                n = ofVec3f(1.f, 0.f, 0.f);
                 break;
             case XMAX:
-                j = ofVec3f(-1.f, 0.f, 0.f);
+                n = ofVec3f(-1.f, 0.f, 0.f);
                 break;
             case YMIN:
-                j = ofVec3f(0.f, 1.f, 0.f);
+                n = ofVec3f(0.f, 1.f, 0.f);
                 break;
             case YMAX:
-                j = ofVec3f(0.f, -1.f, 0.f);
+                n = ofVec3f(0.f, -1.f, 0.f);
                 break;
             case ZMIN:
-                j = ofVec3f(0.f, 0.f, 1.f);
+                n = ofVec3f(0.f, 0.f, 1.f);
                 break;
             case ZMAX:
-                j = ofVec3f(0.f, 0.f, -1.f);
+                n = ofVec3f(0.f, 0.f, -1.f);
                 break;
             default:
                 break;
             }
-            j *= (1.f * body.m);
+            
+            if (wallId != NONE) {
+collisions.push_back(xi_c);
+                float e = 0.2f;
+                float j = -(1 + e)*vi_c.dot(n) /
+                    (1.f / body.m + (body.IInv*(ri_c.crossed(n)).crossed(ri_c)).dot(n));
+                assert(j > 0.f);
 
-            // update linear, angular momentum with impulse
-            body.P += j;
-            body.L += ri_c.crossed(j);
-            // update linear, angular velocities from momentum
-            body.v = body.P / body.m;
-            body.w = body.IInv * body.L;
+                // update linear, angular momentum with impulse
+                body.P += j*n;
+                body.L += ri_c.crossed(j*n);
+                // update linear, angular velocities from momentum
+                body.v = body.P / body.m;
+                body.w = body.IInv * body.L;
+            } 
 
             dtProcessed += dt_c;
         }
@@ -217,13 +240,20 @@ void ofApp::draw(){
         //ofTranslate(bodies[i].x);
         const ofMatrix3x3& R = bodies[i].R;
         const ofVec3f& T = bodies[i].x;
-        ofMatrix4x4 objToWorld(R.a, R.b, R.c, 0.f,
-                               R.d, R.e, R.f, 0.f,
-                               R.g, R.h, R.i, 0.f,
+        ofMatrix4x4 objToWorld(R.a, R.d, R.g, 0.f,
+                               R.b, R.e, R.h, 0.f,
+                               R.c, R.f, R.i, 0.f,
                                T.x, T.y, T.z, 1.f / PIXELS_PER_METER);
         ofLoadMatrix(objToWorld * viewMatrix);
         bodies[i].mesh.draw();
         ofPopMatrix();
+    }
+
+    ofSetColor(0, 255, 0);
+    for (const ofVec3f& c : collisions) {
+        ofIcoSpherePrimitive sphere(0.3f * PIXELS_PER_METER, 1);
+        sphere.setPosition(c * PIXELS_PER_METER);
+        sphere.draw();
     }
 
     ofDisableLighting();

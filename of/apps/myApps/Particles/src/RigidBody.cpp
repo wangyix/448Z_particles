@@ -201,6 +201,19 @@ RigidBody::RigidBody(const string& fileName, const Material& material, float sca
     IInv = IBodyInv;
 }
 
+void RigidBody::rotate(float rad, const ofVec3f& axis) {
+    ofVec3f a = axis.normalized();
+    float halfAngle = 0.5f * rad;
+    float sin = sinf(halfAngle);
+    ofQuaternion dq = ofQuaternion(sin*a.x, sin*a.y, sin*a.z, cosf(halfAngle));
+    q = dq * q;
+    q.normalize();
+
+    R.setRotate(q);
+    IInv = R * IBodyInv * R.transposed();
+    w = IInv * L;
+}
+
 void RigidBody::step(float dt) {
     x += dt * v;
     float wMag = w.length();
@@ -209,6 +222,7 @@ void RigidBody::step(float dt) {
     float sin = sinf(halfAngle);
     ofQuaternion dq = ofQuaternion(sin*axis.x, sin*axis.y, sin*axis.z, cosf(halfAngle));
     q = dq * q;
+    q.normalize();
 
     R.setRotate(q);
     IInv = R * IBodyInv * R.transposed();
