@@ -51,43 +51,44 @@ void ofApp::exit() {
 enum WALL_ID{ NONE=0, XMIN=1, XMAX=2, YMIN=3, YMAX=4, ZMIN=5, ZMAX=6 };
 
 int ofApp::particleCollideWall(const ofVec3f& x, const ofVec3f& v, float tMax, float* tc) {
+    assert(tMax > 0.f);
     *tc = tMax;
     int id = NONE;
     if (v.x > 0.f) {
         float t = (pMax.x - x.x) / v.x;
-        if (t < *tc) {
+        if (0.f < t && t < *tc) {
             *tc = t;
             id = XMAX;
         }
     } else if (v.x < 0.f) {
         float t = (pMin.x - x.x) / v.x;
-        if (t < *tc) {
+        if (0.f < t && t < *tc) {
             *tc = t;
             id = XMIN;
         }
     }
     if (v.y > 0.f) {
         float t = (pMax.y - x.y) / v.y;
-        if (t < *tc) {
+        if (0.f < t && t < *tc) {
             *tc = t;
             id = YMAX;
         }
     } else if (v.y < 0.f) {
         float t = (pMin.y - x.y) / v.y;
-        if (t < *tc) {
+        if (0.f < t && t < *tc) {
             *tc = t;
             id = YMIN;
         }
     }
     if (v.z > 0.f) {
         float t = (pMax.z - x.z) / v.z;
-        if (t < *tc) {
+        if (0.f < t && t < *tc) {
             *tc = t;
             id = ZMAX;
         }
     } else if (v.z < 0.f) {
         float t = (pMin.z - x.z) / v.z;
-        if (t < *tc) {
+        if (0.f < t && t < *tc) {
             *tc = t;
             id = ZMIN;
         }
@@ -129,7 +130,7 @@ void ofApp::update(){
                     ri_c = ri;
                 }
             }
-
+            assert(dt_c > 0.f);
             body.step(dt_c);
 
             // compute impulse imparted by collision at this vertex, if any
@@ -157,7 +158,7 @@ void ofApp::update(){
             default:
                 break;
             }
-            j *= (0.1f * body.m);
+            j *= (1.f * body.m);
 
             // update linear, angular momentum with impulse
             body.P += j;
