@@ -61,4 +61,6 @@ private:
     std::mutex audioBufferLock;
 
     ofVec3f listenPos;
+
+    ofMatrix4x4 viewMatrix;
 };

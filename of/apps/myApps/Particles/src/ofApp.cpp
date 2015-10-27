@@ -1,6 +1,5 @@
 #include "ofApp.h"
-#include <iostream>
-#include <fstream>
+
 #include <assert.h>
 #include <algorithm>
 
@@ -12,63 +11,20 @@ static const Material materials[NUM_MATERIALS] = { Material(8940.f, 123.4f * 1e9
                                                    Material(2700.f, 62.f * 1e9f, 0.20f, ofColor(0, 0, 255, 255)),
                                                    Material(1200.f, 2.4f * 1e9f, 0.37f, ofColor(255, 0, 255, 255)) };
 
+static const string sphereObjFileName = "C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/sphere/sphere.obj";
+static const string rodObjFileName = "C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/rod/rod.obj";
+static const string groundObjFileName = "C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/ground/ground.obj";
 
-static void readObj(const string& fileName, ofMesh* mesh) {
-    cout << "Reading geometry data from " << fileName << endl;
-    ifstream file;
-    file.open(fileName, ios::in);
-    if (!file.is_open()) {
-        cout << "Failed to open " << fileName << endl;
-        return;
-    }
-    mesh->clear();
-    vector<ofVec3f> normals;
-    string line;
-    while (getline(file, line)) {
-        char c;
-        istringstream iss(line);
-        iss >> c;
-        if (c == '#') continue;
-        else if (c == 'v') {
-            ofVec3f v;
-            iss >> v.x >> v.y >> v.z;
-            mesh->addVertex(v);
-            normals.emplace_back(0.f, 0.f, 0.f);
-        } else if (c == 'f') {
-            int indices[3];
-            iss >> indices[0] >> indices[1] >> indices[2];
-            ofVec3f v[3];
-            for (int i = 0; i < 3; i++) {
-                v[i] = mesh->getVertex(--indices[i]);
-            }
-            ofVec3f n = (v[1] - v[0]).crossed(v[2] - v[0]).normalized();
-            for (int i = 0; i < 3; i++) {
-                normals[indices[i]] += n;
-            }
-            mesh->addTriangle(indices[0], indices[1], indices[2]);
-        } else{
-            std::cout << "Warning: unrecognized line type " << c << endl;
-        }
-    }
-    file.close();
-    for (int i = 0; i < normals.size(); i++) {
-        normals[i].normalize();
-    }
-    mesh->addNormals(normals);
-    mesh->setMode(OF_PRIMITIVE_TRIANGLES);
-}
 
 //--------------------------------------------------------------
 void ofApp::setup(){
     windowResized(ofGetWidth(), ofGetHeight());
 
     // read objs
-    ofMesh mesh;
-    //readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/sphere/sphere.obj", meshes.back());
-    //readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/rod/rod.obj", meshes.back());
-    readObj("C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/ground/ground.obj", &mesh);
-    
-    bodies.push_back(RigidBody(mesh, materials[0]));
+    //bodies.emplace_back(sphereObjFileName, materials[0], 1.f);
+    //bodies.emplace_back(rodObjFileName, materials[0], 40.f);
+    bodies.emplace_back(groundObjFileName, materials[0], 0.2f);
+    bodies[0].x = 0.5f * (pMin + pMax) + ofVec3f(0.f, 2.f, 0.f);
 
     // initialize light
     ofSetSmoothLighting(true);
@@ -132,14 +88,21 @@ void ofApp::draw(){
     backWall.draw();
     topWall.draw();
     bottomWall.draw();
-
-    ofSetColor(255, 255, 255);
+    
     for (int i = 0; i < bodies.size(); i++) {
-        ofLoadIdentityMatrix();
-        ofTranslate(0.5f * pMin + 0.5f * pMax * PIXELS_PER_METER + ofVec3f(0, 100, 0));
-        ofScale(0.2 * PIXELS_PER_METER, 0.2 * PIXELS_PER_METER, 0.2 * PIXELS_PER_METER);
-        //meshes[0].draw();
-        ofLoadIdentityMatrix();
+        ofSetColor(bodies[i].material.color);
+        ofPushMatrix();
+        //ofScale(PIXELS_PER_METER, PIXELS_PER_METER, PIXELS_PER_METER);
+        //ofTranslate(bodies[i].x);
+        const ofMatrix3x3& R = bodies[i].R;
+        const ofVec3f& T = bodies[i].x;
+        ofMatrix4x4 objToWorld(R.a, R.b, R.c, 0.f,
+                               R.d, R.e, R.f, 0.f,
+                               R.g, R.h, R.i, 0.f,
+                               T.x, T.y, T.z, 1.f / PIXELS_PER_METER);
+        ofLoadMatrix(objToWorld * viewMatrix);
+        bodies[i].mesh.draw();
+        ofPopMatrix();
     }
 
     ofDisableLighting();
@@ -160,7 +123,28 @@ void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
 
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key){
-
+    switch (key) {
+    case '1':
+        bodies[0].x.x -= 1.f;
+        break;
+    case '2':
+        bodies[0].x.x += 1.f;
+        break;
+    case '3':
+        bodies[0].x.y -= 1.f;
+        break;
+    case '4':
+        bodies[0].x.y += 1.f;
+        break;
+    case '5':
+        bodies[0].x.z -= 1.f;
+        break;
+    case '6':
+        bodies[0].x.z += 1.f;
+        break;
+    default:
+        break;
+    }
 }
 
 //--------------------------------------------------------------
@@ -207,6 +191,7 @@ void ofApp::mouseReleased(int x, int y, int button){
 //--------------------------------------------------------------
 void ofApp::windowResized(int w, int h){
     ofSetupScreenPerspective(w, h, 60.f, BOX_ZMAX * PIXELS_PER_METER, BOX_ZMIN * PIXELS_PER_METER);
+    viewMatrix = ofGetCurrentMatrix(OF_MATRIX_MODELVIEW);
 
     pMin.x = 0.f;
     pMax.x = w / PIXELS_PER_METER;

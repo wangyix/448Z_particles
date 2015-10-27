@@ -1,5 +1,53 @@
 #include "RigidBody.h"
 #include <assert.h>
+#include <iostream>
+#include <fstream>
+
+static void readObj(const string& fileName, float scale, ofMesh* mesh) {
+    cout << "Reading geometry data from " << fileName << endl;
+    ifstream file;
+    file.open(fileName, ios::in);
+    if (!file.is_open()) {
+        cout << "Failed to open " << fileName << endl;
+        return;
+    }
+    mesh->clear();
+    vector<ofVec3f> normals;
+    string line;
+    while (getline(file, line)) {
+        char c;
+        istringstream iss(line);
+        iss >> c;
+        if (c == '#') continue;
+        else if (c == 'v') {
+            ofVec3f v;
+            iss >> v.x >> v.y >> v.z;
+            mesh->addVertex(v * scale);
+            normals.emplace_back(0.f, 0.f, 0.f);
+        } else if (c == 'f') {
+            int indices[3];
+            iss >> indices[0] >> indices[1] >> indices[2];
+            ofVec3f v[3];
+            for (int i = 0; i < 3; i++) {
+                v[i] = mesh->getVertex(--indices[i]);
+            }
+            ofVec3f n = (v[1] - v[0]).crossed(v[2] - v[0]).normalized();
+            for (int i = 0; i < 3; i++) {
+                normals[indices[i]] += n;
+            }
+            mesh->addTriangle(indices[0], indices[1], indices[2]);
+        } else{
+            std::cout << "Warning: unrecognized line type " << c << endl;
+        }
+    }
+    file.close();
+    for (int i = 0; i < normals.size(); i++) {
+        normals[i].normalize();
+    }
+    mesh->addNormals(normals);
+    mesh->setMode(OF_PRIMITIVE_TRIANGLES);
+}
+
 
 static float signedVolume(const ofMeshFace& tri) {
     const ofVec3f& v1 = tri.getVertex(0);
@@ -97,19 +145,18 @@ static void signedMoment2(const ofMeshFace& tri,
     *Mxz = 0.5f * (delta[2] / 60.f) * (V[0].x*g[0][Z] + V[1].x*g[1][Z] + V[2].x*g[2][Z]);
 }
 
-RigidBody::RigidBody(const ofMesh& triMesh, const Material& material, float scale)
-    : mesh(triMesh),
+RigidBody::RigidBody(const string& fileName, const Material& material, float scale)
+    :
     material(material),
     x(0.f, 0.f, 0.f),
+    q(0.f, 0.f, 0.f, 1.f),
     P(0.f, 0.f, 0.f),
-    L(0.f, 0.f, 0.f) {
+    L(0.f, 0.f, 0.f),
+    R(IDENTITY3X3),
+    v(0.f, 0.f, 0.f),
+    w(0.f, 0.f, 0.f) {
 
-    // scale mesh points
-    if (scale != 1.f) {
-        for (int i = 0; i < mesh.getNumVertices(); i++) {
-            mesh.setVertex(i, scale * mesh.getVertex(i));
-        }
-    }
+    readObj(fileName, scale, &mesh);
 
     // compute zeroth and first order moments
     float M = 0.f;
@@ -123,14 +170,14 @@ RigidBody::RigidBody(const ofMesh& triMesh, const Material& material, float scal
     }
 
     m = material.density * abs(M);          // mass
-    ofVec3f R = ofVec3f(Mx, My, Mz) / M;    // center of mass
+    ofVec3f r = ofVec3f(Mx, My, Mz) / M;    // center of mass
 
     // move mesh so its center of mass is at origin
     for (int i = 0; i < mesh.getNumVertices(); i++) {
-        mesh.setVertex(i, mesh.getVertex(i) - R);
+        mesh.setVertex(i, mesh.getVertex(i) - r);
     }
     triangles = &mesh.getUniqueFaces();
-
+    
     // compute second-order moments
     float Mxx = 0.f, Myy = 0.f, Mzz = 0.f;
     float Mxy = 0.f, Myz = 0.f, Mxz = 0.f;
@@ -150,8 +197,6 @@ RigidBody::RigidBody(const ofMesh& triMesh, const Material& material, float scal
     IBody = ofMatrix3x3(Ixx, -Ixy, -Ixz,    // moment of inertia
                         -Ixy, Iyy, -Iyz,
                         -Ixz, -Iyz, Izz);
-    IBodyInv = IBody;
-    IBodyInv.invert();
-
-
+    IBodyInv = IBody.inverse();
+    IInv = IBodyInv;
 }

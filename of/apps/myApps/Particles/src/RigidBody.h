@@ -3,6 +3,8 @@
 
 #include "ofMain.h"
 
+const ofMatrix3x3 IDENTITY3X3 = ofMatrix3x3(1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 1.f);
+
 struct Material {
     Material(float density, float yMod, float pRatio, const ofColor& color)
         : density(density), yMod(yMod), pRatio(pRatio), color(color) {}
@@ -14,7 +16,7 @@ struct Material {
 
 struct RigidBody {
 public:
-    RigidBody(const ofMesh& triMesh, const Material& material, float scale=1.f);
+    RigidBody(const string& fileName, const Material& material, float scale=1.f);
 
 public:
     ofMesh mesh;
@@ -33,7 +35,7 @@ public:
 
     // Derived quantities
     ofMatrix3x3 IInv;
-    ofMatrix3x3 R;      // rotation matrix from q
+    ofMatrix3x3 R;      // rotation matrix from q (object to world)
     ofVec3f v;          // linear velocity
     ofVec3f w;          // angular velocity
 };
