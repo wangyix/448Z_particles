@@ -18,6 +18,8 @@ struct RigidBody {
 public:
     RigidBody(const string& fileName, const Material& material, float scale=1.f);
 
+    void step(float dt);
+
 public:
     ofMesh mesh;
     const Material& material;
@@ -34,10 +36,10 @@ public:
     ofVec3f L;          // angular momentum
 
     // Derived quantities
-    ofMatrix3x3 IInv;
+    ofMatrix3x3 IInv;   // IInv = R * IBodyInv * R^T
     ofMatrix3x3 R;      // rotation matrix from q (object to world)
-    ofVec3f v;          // linear velocity
-    ofVec3f w;          // angular velocity
+    ofVec3f v;          // linear velocity      v = P / m
+    ofVec3f w;          // angular velocity     w = IInv * L
 };
 
 #endif

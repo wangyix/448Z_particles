@@ -16,11 +16,15 @@ static const string rodObjFileName = "C:/Users/wangyix/Desktop/GitHub/CS448Z/of/
 static const string groundObjFileName = "C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/ground/ground.obj";
 
 
+static int secondsToSamples(float t) {
+    return ((int)(t * AUDIO_SAMPLE_RATE)) * CHANNELS;
+}
+
 //--------------------------------------------------------------
 void ofApp::setup(){
     windowResized(ofGetWidth(), ofGetHeight());
 
-    // read objs
+    // initialize rigid bodies
     //bodies.emplace_back(sphereObjFileName, materials[0], 1.f);
     //bodies.emplace_back(rodObjFileName, materials[0], 40.f);
     bodies.emplace_back(groundObjFileName, materials[0], 0.2f);
@@ -40,17 +44,58 @@ void ofApp::setup(){
     ofSetFrameRate(60);
 }
 
+//--------------------------------------------------------------
 void ofApp::exit() {
 }
 
-static int secondsToSamples(float t) {
-    return ((int)(t * AUDIO_SAMPLE_RATE)) * CHANNELS;
-}
 
 //--------------------------------------------------------------
 void ofApp::update(){
     float dt = ofGetLastFrameTime();
     
+    // apply non-rotational forces to bodies
+    for (RigidBody& body : bodies) {
+        body.P += gravity * dt;
+        body.v = body.P / body.m;
+    }
+
+    // compute collisions of vertices against walls
+    for (RigidBody& body : bodies) {
+
+
+        float dtProcessed = 0.f;
+        while (dtProcessed < dt) {
+
+            ofVec3f ri_c;        // ri of the vertex that collides
+            float dt_c = dt;     // collision will occur dt_c from now
+
+            for (int i = 0; i < body.mesh.getNumVertices(); i++) {
+                ofVec3f ri = body.R * body.mesh.getVertex(i);
+                ofVec3f xi = body.x + ri;
+                ofVec3f vi = body.v + body.w.crossed(ri);
+
+                // update dt_c to earliest collision time
+                // update ri_c to ri of earliest collision
+            }
+
+            body.step(dt_c);
+
+            // compute impulse imparted by collision at this vertex, if any
+            // accumulate effect of impulse into dP, dL
+            ofVec3f j(0.f, 0.f, 0.f);
+
+            // update linear, angular momentum with impulse
+            body.P += j;
+            body.L += ri_c.crossed(j);
+            // update linear, angular velocities from momentum
+            body.v = body.P / body.m;
+            body.w = body.IInv * body.L;
+
+            dtProcessed += dt_c;
+        }
+
+    }
+
     float tempAudioBuffer[CHANNELS * AUDIO_SAMPLE_RATE];
     memset(tempAudioBuffer, 0, CHANNELS * AUDIO_SAMPLE_RATE * sizeof(float));
     int audioStart = CHANNELS * AUDIO_SAMPLE_RATE;

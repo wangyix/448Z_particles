@@ -200,3 +200,17 @@ RigidBody::RigidBody(const string& fileName, const Material& material, float sca
     IBodyInv = IBody.inverse();
     IInv = IBodyInv;
 }
+
+void RigidBody::step(float dt) {
+    x += dt * v;
+    float wMag = w.length();
+    float halfAngle = 0.5f * dt * wMag;
+    ofVec3f axis = w / wMag;
+    float sin = sinf(halfAngle);
+    ofQuaternion dq = ofQuaternion(sin*axis.x, sin*axis.y, sin*axis.z, cosf(halfAngle));
+    q = dq * q;
+
+    R.setRotate(q);
+    IInv = R * IBodyInv * R.transposed();
+    w = IInv * L;
+}
