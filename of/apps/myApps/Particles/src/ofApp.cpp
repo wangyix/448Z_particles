@@ -41,13 +41,59 @@ void ofApp::setup(){
     listenPos = ofVec3f(0.5f * (pMin.x + pMax.x), 0.5f * (pMin.y + pMax.y), BOX_ZMAX);
 
     ofSoundStreamSetup(CHANNELS, 0, AUDIO_SAMPLE_RATE, 256, 4);
-    ofSetFrameRate(60);
+    //ofSetFrameRate(60);
 }
 
 //--------------------------------------------------------------
 void ofApp::exit() {
 }
 
+enum WALL_ID{ NONE=0, XMIN=1, XMAX=2, YMIN=3, YMAX=4, ZMIN=5, ZMAX=6 };
+
+int ofApp::particleCollideWall(const ofVec3f& x, const ofVec3f& v, float tMax, float* tc) {
+    *tc = tMax;
+    int id = NONE;
+    if (v.x > 0.f) {
+        float t = (pMax.x - x.x) / v.x;
+        if (t < *tc) {
+            *tc = t;
+            id = XMAX;
+        }
+    } else if (v.x < 0.f) {
+        float t = (pMin.x - x.x) / v.x;
+        if (t < *tc) {
+            *tc = t;
+            id = XMIN;
+        }
+    }
+    if (v.y > 0.f) {
+        float t = (pMax.y - x.y) / v.y;
+        if (t < *tc) {
+            *tc = t;
+            id = YMAX;
+        }
+    } else if (v.y < 0.f) {
+        float t = (pMin.y - x.y) / v.y;
+        if (t < *tc) {
+            *tc = t;
+            id = YMIN;
+        }
+    }
+    if (v.z > 0.f) {
+        float t = (pMax.z - x.z) / v.z;
+        if (t < *tc) {
+            *tc = t;
+            id = ZMAX;
+        }
+    } else if (v.z < 0.f) {
+        float t = (pMin.z - x.z) / v.z;
+        if (t < *tc) {
+            *tc = t;
+            id = ZMIN;
+        }
+    }
+    return id;
+}
 
 //--------------------------------------------------------------
 void ofApp::update(){
@@ -55,8 +101,8 @@ void ofApp::update(){
     
     // apply non-rotational forces to bodies
     for (RigidBody& body : bodies) {
-        body.P += gravity * dt;
-        body.v = body.P / body.m;
+        body.v += gravity * dt;
+        body.P = body.m * body.v;
     }
 
     // compute collisions of vertices against walls
@@ -68,21 +114,50 @@ void ofApp::update(){
 
             ofVec3f ri_c;        // ri of the vertex that collides
             float dt_c = dt;     // collision will occur dt_c from now
+            int wallId = NONE;
 
             for (int i = 0; i < body.mesh.getNumVertices(); i++) {
                 ofVec3f ri = body.R * body.mesh.getVertex(i);
                 ofVec3f xi = body.x + ri;
                 ofVec3f vi = body.v + body.w.crossed(ri);
 
-                // update dt_c to earliest collision time
-                // update ri_c to ri of earliest collision
+                float t;
+                int id = particleCollideWall(xi, vi, dt - dtProcessed, &t);
+                if (id != NONE && t < dt_c) {
+                    dt_c = t;
+                    wallId = id;
+                    ri_c = ri;
+                }
             }
 
             body.step(dt_c);
 
             // compute impulse imparted by collision at this vertex, if any
             // accumulate effect of impulse into dP, dL
-            ofVec3f j(0.f, 0.f, 0.f);
+            ofVec3f j;
+            switch (wallId) {
+            case XMIN:
+                j = ofVec3f(1.f, 0.f, 0.f);
+                break;
+            case XMAX:
+                j = ofVec3f(-1.f, 0.f, 0.f);
+                break;
+            case YMIN:
+                j = ofVec3f(0.f, 1.f, 0.f);
+                break;
+            case YMAX:
+                j = ofVec3f(0.f, -1.f, 0.f);
+                break;
+            case ZMIN:
+                j = ofVec3f(0.f, 0.f, 1.f);
+                break;
+            case ZMAX:
+                j = ofVec3f(0.f, 0.f, -1.f);
+                break;
+            default:
+                break;
+            }
+            j *= (0.1f * body.m);
 
             // update linear, angular momentum with impulse
             body.P += j;
