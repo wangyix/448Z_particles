@@ -26,8 +26,8 @@ void ofApp::setup(){
 
     // initialize rigid bodies
     //bodies.emplace_back(sphereObjFileName, materials[0], 1.f);
-    //bodies.emplace_back(rodObjFileName, materials[0], 40.f);
-    bodies.emplace_back(groundObjFileName, materials[0], 0.2f);
+    bodies.emplace_back(rodObjFileName, materials[0], 40.f);
+    //bodies.emplace_back(groundObjFileName, materials[0], 0.2f);
     bodies[0].x = 0.5f * (pMin + pMax) + ofVec3f(0.f, 2.f, 0.f);
     bodies[0].rotate(PI / 6.f, ofVec3f(0.f, 0.f, 1.f));
     //bodies[0].rotate(-PI / 6.f, ofVec3f(1.f, 0.f, 0.f));
@@ -43,7 +43,7 @@ void ofApp::setup(){
     listenPos = ofVec3f(0.5f * (pMin.x + pMax.x), 0.5f * (pMin.y + pMax.y), BOX_ZMAX);
 
     ofSoundStreamSetup(CHANNELS, 0, AUDIO_SAMPLE_RATE, 256, 4);
-    ofSetFrameRate(60);
+    //ofSetFrameRate(60);
 }
 
 //--------------------------------------------------------------
@@ -58,39 +58,39 @@ int ofApp::particleCollideWall(const ofVec3f& x, const ofVec3f& v, float tMax, f
     int id = NONE;
     if (v.x > 0.f) {
         float t = (pMax.x - x.x) / v.x;
-        if (0.f < t && t < *tc) {
+        if (t < *tc) {
             *tc = t;
             id = XMAX;
         }
     } else if (v.x < 0.f) {
         float t = (pMin.x - x.x) / v.x;
-        if (0.f < t && t < *tc) {
+        if (t < *tc) {
             *tc = t;
             id = XMIN;
         }
     }
     if (v.y > 0.f) {
         float t = (pMax.y - x.y) / v.y;
-        if (0.f < t && t < *tc) {
+        if (t < *tc) {
             *tc = t;
             id = YMAX;
         }
     } else if (v.y < 0.f) {
         float t = (pMin.y - x.y) / v.y;
-        if (0.f < t && t < *tc) {
+        if (t < *tc) {
             *tc = t;
             id = YMIN;
         }
     }
     if (v.z > 0.f) {
         float t = (pMax.z - x.z) / v.z;
-        if (0.f < t && t < *tc) {
+        if (t < *tc) {
             *tc = t;
             id = ZMAX;
         }
     } else if (v.z < 0.f) {
         float t = (pMin.z - x.z) / v.z;
-        if (0.f < t && t < *tc) {
+        if (t < *tc) {
             *tc = t;
             id = ZMIN;
         }
@@ -103,27 +103,27 @@ vector<ofVec3f> collisions;
 //--------------------------------------------------------------
 void ofApp::update(){
 //if (!collisions.empty()) { return; }
-    float dt = ofGetLastFrameTime();
+    float dt = 0.01f;//ofGetLastFrameTime();
     
     // apply non-rotational forces to bodies
     for (RigidBody& body : bodies) {
         body.v += gravity * dt;
         body.P = body.m * body.v;
     }
-static float count = 0.f;
+/*static float count = 0.f;
 count += dt;
 if (count > 1.f) {
     count = 0.f;
     collisions.clear();
 }
-
+*/
     // compute collisions of vertices against walls
     for (RigidBody& body : bodies) {
 
 
         float dtProcessed = 0.f;
         while (dtProcessed < dt) {
-ofVec3f riBody_c;
+int i_c;
 ofVec3f xi_c;
             ofVec3f ri_c;                               // ri of the vertex that collides
             ofVec3f vi_c;
@@ -138,16 +138,20 @@ ofVec3f xi_c;
                 float t;
                 int id = particleCollideWall(xi, vi, dt - dtProcessed, &t);
                 if (id != NONE && t < dt_c) {
-riBody_c = body.mesh.getVertex(i);
 xi_c = xi;
+i_c = i;
                     dt_c = t;
                     wallId = id;
                     ri_c = ri;
                     vi_c = vi;
                 }
             }
-            assert(dt_c > 0.f);
-            body.step(dt_c);
+            //assert(dt_c > 0.f);
+            if (dt_c < 0.f) {
+                dt_c = 0.f;
+            } else {
+                body.step(dt_c);
+            }
 
             // compute impulse imparted by collision at this vertex, if any
             // accumulate effect of impulse into dP, dL
@@ -176,11 +180,12 @@ xi_c = xi;
             }
             
             if (wallId != NONE) {
-collisions.push_back(xi_c);
-                float e = 0.2f;
+//collisions.push_back(xi_c);
+                float e = 0.6f;
+                // IInv will be different if body is stepped after finding ri_c, vi_c
                 float j = -(1 + e)*vi_c.dot(n) /
-                    (1.f / body.m + (body.IInv*(ri_c.crossed(n)).crossed(ri_c)).dot(n));
-                assert(j > 0.f);
+                    (  1.f / body.m + ( (body.IInv * (ri_c.crossed(n))).crossed(ri_c) ).dot(n)  );
+                //assert(j > 0.f);
 
                 // update linear, angular momentum with impulse
                 body.P += j*n;
@@ -188,6 +193,12 @@ collisions.push_back(xi_c);
                 // update linear, angular velocities from momentum
                 body.v = body.P / body.m;
                 body.w = body.IInv * body.L;
+
+
+                ofVec3f ri = body.R * body.mesh.getVertex(i_c);
+                ofVec3f vi = body.v + body.w.crossed(ri);
+                float ratio = vi.dot(n) / vi_c.dot(n);  // should be -e
+                printf("%f ", ratio);
             } 
 
             dtProcessed += dt_c;
