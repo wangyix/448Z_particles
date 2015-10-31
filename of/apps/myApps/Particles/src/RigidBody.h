@@ -39,6 +39,7 @@ public:
     // Derived quantities
     ofMatrix3x3 IInv;   // IInv = R * IBodyInv * R^T
     ofMatrix3x3 R;      // rotation matrix from q (object to world)
+    ofMatrix3x3 RInv;
     ofVec3f v;          // linear velocity      v = P / m
     ofVec3f w;          // angular velocity     w = IInv * L
 };

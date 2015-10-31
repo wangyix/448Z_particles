@@ -153,6 +153,7 @@ RigidBody::RigidBody(const string& fileName, const Material& material, float sca
     P(0.f, 0.f, 0.f),
     L(0.f, 0.f, 0.f),
     R(IDENTITY3X3),
+    RInv(IDENTITY3X3),
     v(0.f, 0.f, 0.f),
     w(0.f, 0.f, 0.f) {
 
@@ -191,13 +192,20 @@ RigidBody::RigidBody(const string& fileName, const Material& material, float sca
     float Ixx = material.density * (Myy + Mzz);
     float Iyy = material.density * (Mzz + Mxx);
     float Izz = material.density * (Mxx + Myy);
-    float Ixy = material.density * Mxy;
-    float Iyz = material.density * Myz;
-    float Ixz = material.density * Mxz;
-    IBody = ofMatrix3x3(Ixx, -Ixy, -Ixz,    // moment of inertia
+    //float Ixy = material.density * Mxy;
+    //float Iyz = material.density * Myz;
+    //float Ixz = material.density * Mxz;
+    /*IBody = ofMatrix3x3(Ixx, -Ixy, -Ixz,    // moment of inertia
                         -Ixy, Iyy, -Iyz,
                         -Ixz, -Iyz, Izz);
-    IBodyInv = IBody.inverse();
+    IBodyInv = IBody.inverse();*/
+    //Ixx *= 100.f;
+    IBody = ofMatrix3x3(Ixx, 0.f, 0.f,    // assuming Ixy,Iyz,Ixz=0
+                        0.f, Iyy, 0.f,
+                        0.f, 0.f, Izz);
+    IBodyInv = ofMatrix3x3(1.f/Ixx, 0.f, 0.f,    // assuming Ixy,Iyz,Ixz=0
+                           0.f, 1.f/Iyy, 0.f,
+                           0.f, 0.f, 1.f/Izz);
     IInv = IBodyInv;
 }
 
@@ -210,12 +218,44 @@ void RigidBody::rotate(float rad, const ofVec3f& axis) {
     q.normalize();
 
     R.setRotate(q);
+    RInv = R.transposed();
     IInv = R * IBodyInv * R.transposed();
     w = IInv * L;
 }
 
 void RigidBody::step(float dt) {
     x += dt * v;
+
+    // update w using Euler's equation
+    assert(dt > 0.f);
+    // not quite backwards euler???
+    ofVec3f wBody = RInv * w;
+    //ofVec3f tauBody = RInv * (dL / dt);
+    float w1 = wBody.x;
+    float w2 = wBody.y;
+    float w3 = wBody.z;
+    float I1 = IBody.a;
+    float I2 = IBody.e;
+    float I3 = IBody.i;
+    ofMatrix3x3 A(I1 / dt, (I3 - I2)*w3, 0.f,
+                  0.f, I2 / dt, (I1 - I3)*w1,
+                  (I2 - I1)*w2, 0.f, I3 / dt);
+    ofVec3f b(I1*w1 / dt, I2*w2 / dt, I3*w3 / dt);
+    wBody = A.inverse() * b;// (b + tauBody);
+    w = R * wBody;
+
+    /*ofVec3f dwBodydt;
+    float Ixx = IBody.a;
+    float Iyy = IBody.e;
+    float Izz = IBody.i;
+    dwBodydt.x = -(Izz - Iyy)*wBody.y*wBody.z / Ixx;
+    dwBodydt.y = -(Ixx - Izz)*wBody.z*wBody.x / Iyy;
+    dwBodydt.z = -(Iyy - Ixx)*wBody.x*wBody.y / Izz;
+    wBody += dt * dwBodydt;
+    w = R * wBody;
+    */
+
+    // update q, R, IInv using w
     float wMag = w.length();
     float halfAngle = 0.5f * dt * wMag;
     ofVec3f axis = w / wMag;
@@ -223,8 +263,7 @@ void RigidBody::step(float dt) {
     ofQuaternion dq = ofQuaternion(sin*axis.x, sin*axis.y, sin*axis.z, cosf(halfAngle));
     q = dq * q;
     q.normalize();
-
     R.setRotate(q);
-    IInv = R * IBodyInv * R.transposed();
-    w = IInv * L;
+    RInv = R.transposed();
+    IInv = R * IBodyInv * RInv;
 }

@@ -52,48 +52,51 @@ void ofApp::exit() {
 
 enum WALL_ID{ NONE=0, XMIN=1, XMAX=2, YMIN=3, YMAX=4, ZMIN=5, ZMAX=6 };
 
-int ofApp::particleCollideWall(const ofVec3f& x, const ofVec3f& v, float tMax, float* tc) {
+int ofApp::particleCollideWall(const ofVec3f& x, const ofVec3f& v, float tMin, float tMax, float* tc) {
     assert(tMax > 0.f);
-    *tc = tMax;
+    float tt = tMax;
     int id = NONE;
     if (v.x > 0.f) {
         float t = (pMax.x - x.x) / v.x;
-        if (t < *tc) {
-            *tc = t;
+        if (tMin < t && t < tt) {
+            tt = t;
             id = XMAX;
         }
     } else if (v.x < 0.f) {
         float t = (pMin.x - x.x) / v.x;
-        if (t < *tc) {
-            *tc = t;
+        if (tMin < t && t < tt) {
+            tt = t;
             id = XMIN;
         }
     }
     if (v.y > 0.f) {
         float t = (pMax.y - x.y) / v.y;
-        if (t < *tc) {
-            *tc = t;
+        if (tMin < t && t < tt) {
+            tt = t;
             id = YMAX;
         }
     } else if (v.y < 0.f) {
         float t = (pMin.y - x.y) / v.y;
-        if (t < *tc) {
-            *tc = t;
+        if (tMin < t && t < tt) {
+            tt = t;
             id = YMIN;
         }
     }
     if (v.z > 0.f) {
         float t = (pMax.z - x.z) / v.z;
-        if (t < *tc) {
-            *tc = t;
+        if (tMin < t && t < tt) {
+            tt = t;
             id = ZMAX;
         }
     } else if (v.z < 0.f) {
         float t = (pMin.z - x.z) / v.z;
-        if (t < *tc) {
-            *tc = t;
+        if (tMin < t && t < tt) {
+            tt = t;
             id = ZMIN;
         }
+    }
+    if (tt < tMax) {
+        *tc = tt;
     }
     return id;
 }
@@ -112,6 +115,7 @@ void ofApp::update(){
     for (RigidBody& body : bodies) {
 
         float dtProcessed = 0.f;
+        ofVec3f dL(0.f, 0.f, 0.f);
         while (dtProcessed < dt) {
             // find vertex with earliest wall collision, if any
             ofVec3f ri_c;                   // ri of the vertex that collides
@@ -123,7 +127,7 @@ void ofApp::update(){
                 ofVec3f xi = body.x + ri;
                 ofVec3f vi = body.v + body.w.crossed(ri);
                 float t;
-                int id = particleCollideWall(xi, vi, dt - dtProcessed, &t);
+                int id = particleCollideWall(xi, vi, -dt, dt - dtProcessed, &t);
                 if (id != NONE && t < dt_c) {
                     dt_c = t;
                     wallId = id;
@@ -132,7 +136,7 @@ void ofApp::update(){
                 }
             }
             //assert(dt_c > 0.f);
-            if (dt_c < 0.f) {
+            if (dt_c <= 0.f) {
                 dt_c = 0.f;
             } else {
                 body.step(dt_c);
@@ -145,30 +149,39 @@ void ofApp::update(){
                 switch (wallId) {
                 case XMIN:
                     n = ofVec3f(1.f, 0.f, 0.f);
+                    printf("x0 ");
                     break;
                 case XMAX:
                     n = ofVec3f(-1.f, 0.f, 0.f);
+                    printf("x1 ");
                     break;
                 case YMIN:
                     n = ofVec3f(0.f, 1.f, 0.f);
+                    printf("y0 ");
                     break;
                 case YMAX:
                     n = ofVec3f(0.f, -1.f, 0.f);
+                    printf("y1 ");
                     break;
                 case ZMIN:
                     n = ofVec3f(0.f, 0.f, 1.f);
+                    printf("z0 ");
                     break;
                 case ZMAX:
                     n = ofVec3f(0.f, 0.f, -1.f);
+                    printf("z1 ");
                     break;
                 default:
                     break;
                 }
 
-                float e = 0.6f;
+                float e = 0.3f;
                 // NOTE: IInv will be different if body is stepped after finding ri_c, vi_c
                 float j = -(1 + e)*vi_c.dot(n) /
                     (  1.f / body.m + ( (body.IInv * (ri_c.crossed(n))).crossed(ri_c) ).dot(n)  );
+                j = min(j, (1+e) * abs(body.P.dot(n)));
+                //printf("speed: %f\n", body.v.length());
+                //assert(j > 0.f);
 
                 // update linear, angular momentum with impulse
                 body.P += j*n;
@@ -176,7 +189,9 @@ void ofApp::update(){
                 // update linear, angular velocities from momentum
                 body.v = body.P / body.m;
                 body.w = body.IInv * body.L;
-            } 
+
+                dL = ri_c.crossed(j*n);
+            }
 
             dtProcessed += dt_c;
         }

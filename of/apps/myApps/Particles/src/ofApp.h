@@ -43,7 +43,7 @@ public:
     void audioOut(float* output, int bufferSize, int nChannels) override;
 
 private:
-    int particleCollideWall(const ofVec3f& x, const ofVec3f& v, float tMax, float* tc);
+    int particleCollideWall(const ofVec3f& x, const ofVec3f& v, float tMin, float tMax, float* tc);
 
 private:
     ofLight pointLight;
