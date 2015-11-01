@@ -15,6 +15,7 @@
 
 #define AUDIO_SAMPLE_RATE 44100
 #define CHANNELS 2
+#define AUDIO_BUFFER_PAD_TIME 0.01   // in seconds
 
 #define WAV_SAMPLES 4876
 

@@ -98,6 +98,9 @@ public:
         rIndex = (rIndex + n) % (N + 1);
         return n;
     }
+    void clear() {
+        rIndex = wIndex;
+    }
 
     size_t size() const {
         return (N + 1 + wIndex - rIndex) % (N + 1);

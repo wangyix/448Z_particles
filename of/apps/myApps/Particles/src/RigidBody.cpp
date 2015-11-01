@@ -48,6 +48,35 @@ static void readObj(const string& fileName, float scale, ofMesh* mesh) {
     mesh->setMode(OF_PRIMITIVE_TRIANGLES);
 }
 
+static void readModes(const string& fileName, vector<vector<ofVec3f>>* phi, vector<float>* omega) {
+    cout << "Reading modes data from " << fileName << endl;
+    ifstream file;
+    file.open(fileName, ios::in);
+    if (!file.is_open()) {
+        cout << "Failed to open " << fileName << endl;
+        return;
+    }
+    phi->clear();
+    omega->clear();
+    int num_modes, num_vertices;
+    file >> num_modes;
+    file >> num_vertices;
+    for (int i = 0; i < num_modes; i++) {
+        float eigenValue;
+        file >> eigenValue;
+        omega->push_back(sqrtf(eigenValue));
+    }
+    for (int i = 0; i < num_modes; i++) {
+        phi->push_back(vector<ofVec3f>());
+        vector<ofVec3f>& phi_i = phi->back();
+        for (int j = 0; j < num_vertices; j++) {
+            float x, y, z;
+            file >> x >> y >> z;
+            phi_i.emplace_back(x, y, z);
+        }
+    }
+    file.close();
+}
 
 static float signedVolume(const ofMeshFace& tri) {
     const ofVec3f& v1 = tri.getVertex(0);
@@ -94,6 +123,7 @@ static float signedMoment(const ofMeshFace& tri, int coord, int pow) {
         break;
     default:
         assert(false);
+        return 0.f;
         break;
     }
 }
@@ -145,7 +175,7 @@ static void signedMoment2(const ofMeshFace& tri,
     *Mxz = 0.5f * (delta[2] / 60.f) * (V[0].x*g[0][Z] + V[1].x*g[1][Z] + V[2].x*g[2][Z]);
 }
 
-RigidBody::RigidBody(const string& fileName, const Material& material, float scale)
+RigidBody::RigidBody(const string& modesFileName, const string& objFileName, const Material& material, float scale)
     :
     material(material),
     x(0.f, 0.f, 0.f),
@@ -157,7 +187,7 @@ RigidBody::RigidBody(const string& fileName, const Material& material, float sca
     v(0.f, 0.f, 0.f),
     w(0.f, 0.f, 0.f) {
 
-    readObj(fileName, scale, &mesh);
+    readObj(objFileName, scale, &mesh);
 
     // compute zeroth and first order moments
     float M = 0.f;
@@ -207,6 +237,17 @@ RigidBody::RigidBody(const string& fileName, const Material& material, float sca
                            0.f, 1.f/Iyy, 0.f,
                            0.f, 0.f, 1.f/Izz);
     IInv = IBodyInv;
+
+
+    readModes(modesFileName, &phi, &omega);
+    assert(phi.size() == omega.size());
+    assert(phi[0].size() == mesh.getNumVertices());
+
+    // initialize modal amplitude vectors to 0s
+    for (int k = 0; k < 3; k++) {
+        qq[k] = vector<float>(omega.size(), 0.f);
+    }
+    qkAt = 0;
 }
 
 void RigidBody::rotate(float rad, const ofVec3f& axis) {
@@ -226,6 +267,22 @@ void RigidBody::rotate(float rad, const ofVec3f& axis) {
 void RigidBody::step(float dt) {
     x += dt * v;
 
+    // update q, R, IInv using w
+    float wMag = w.length();
+    float halfAngle = 0.5f * dt * wMag;
+    ofVec3f axis = w / wMag;
+    float sin = sinf(halfAngle);
+    ofQuaternion dq = ofQuaternion(sin*axis.x, sin*axis.y, sin*axis.z, cosf(halfAngle));
+    q = dq * q;
+    q.normalize();
+    R.setRotate(q);
+    RInv = R.transposed();
+    IInv = R * IBodyInv * RInv;
+
+    //w = IInv * L;   // ????
+}
+
+void RigidBody::stepW(float dt) {
     // update w using Euler's equation
     assert(dt > 0.f);
     // not quite backwards euler???
@@ -243,27 +300,55 @@ void RigidBody::step(float dt) {
     ofVec3f b(I1*w1 / dt, I2*w2 / dt, I3*w3 / dt);
     wBody = A.inverse() * b;// (b + tauBody);
     w = R * wBody;
+}
 
-    /*ofVec3f dwBodydt;
-    float Ixx = IBody.a;
-    float Iyy = IBody.e;
-    float Izz = IBody.i;
-    dwBodydt.x = -(Izz - Iyy)*wBody.y*wBody.z / Ixx;
-    dwBodydt.y = -(Ixx - Izz)*wBody.z*wBody.x / Iyy;
-    dwBodydt.z = -(Iyy - Ixx)*wBody.x*wBody.y / Izz;
-    wBody += dt * dwBodydt;
-    w = R * wBody;
-    */
+int RigidBody::audioStep(float dt, const ofVec3f& impulse, int vertex, float dt_q, float* qSum) {
 
-    // update q, R, IInv using w
-    float wMag = w.length();
-    float halfAngle = 0.5f * dt * wMag;
-    ofVec3f axis = w / wMag;
-    float sin = sinf(halfAngle);
-    ofQuaternion dq = ofQuaternion(sin*axis.x, sin*axis.y, sin*axis.z, cosf(halfAngle));
-    q = dq * q;
-    q.normalize();
-    R.setRotate(q);
-    RInv = R.transposed();
-    IInv = R * IBodyInv * RInv;
+    float h = dt_q;
+
+    // damping params
+    const float alpha = 0.f;
+    //const float beta = 0.0000001f;         // sphere
+    const float beta = 0.00001f;            // ground
+
+    // impulse applied to vertex will be spread out over one 
+    // time-step of q as a constant force 
+    ofVec3f F = (RInv * impulse) / h;
+
+    int qsToCompute = max((int)(dt / h), 1);
+    for (int k = 0; k < qsToCompute; k++) {
+        qkAt = (qkAt + 1) % 3;
+        const vector<float>& qk1 = qq[(qkAt + 2) % 3];
+        const vector<float>& qk2 = qq[(qkAt + 1) % 3];
+        vector<float>& qk = qq[qkAt];
+        
+        float qkSum = 0.f;
+        for (int i = 0; i < qk.size(); i++) {
+            float wi = omega[i];
+            float xii = 0.5f * (alpha/wi + beta*wi);
+            if (0.f < xii && xii < 1.f) {    // underdamped
+                float wdi = wi * sqrtf(1 - xii*xii);
+
+                float ei = exp(-xii*wi*h);
+                float thetai = wdi * h;
+                float gammai = asinf(xii);
+
+                qk[i] = 2.f*ei*cosf(thetai)*qk1[i] - ei*ei*qk2[i];
+
+                // impulse is applied evenly over the first time-step; no force applied for other time-steps
+                if (k == 0) {
+                    qk[i] += (2.f*(ei*cosf(thetai + gammai) - ei*ei*cosf(2.f*thetai + gammai)) / (3.f*wi*wdi))
+                        * (phi[i][vertex].dot(F));
+                }
+            } else {
+                qk[i] = 0.f;
+            }
+            assert(!isnan(qk[i]));
+            qkSum += qk[i];
+        }
+
+        qSum[k] += qkSum;
+    }
+
+    return qsToCompute;
 }

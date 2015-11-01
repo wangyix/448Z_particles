@@ -14,23 +14,31 @@ static const Material materials[NUM_MATERIALS] = { Material(8940.f, 123.4f * 1e9
 static const string sphereObjFileName = "C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/sphere/sphere.obj";
 static const string rodObjFileName = "C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/rod/rod.obj";
 static const string groundObjFileName = "C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/ground/ground.obj";
+static const string sphereModesFileName = "C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/sphere/modes.txt";
+static const string rodModesFileName = "C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/rod/modes.txt";
+static const string groundModesFileName = "C:/Users/wangyix/Desktop/GitHub/CS448Z/of/apps/myApps/Particles/models/ground/modes.txt";
 
 
 static int secondsToSamples(float t) {
     return ((int)(t * AUDIO_SAMPLE_RATE)) * CHANNELS;
 }
 
+static const int AUDIO_SAMPLES_PAD = secondsToSamples(AUDIO_BUFFER_PAD_TIME);
+
 //--------------------------------------------------------------
 void ofApp::setup(){
     windowResized(ofGetWidth(), ofGetHeight());
 
     // initialize rigid bodies
-    //bodies.emplace_back(sphereObjFileName, materials[0], 1.f);
-    bodies.emplace_back(rodObjFileName, materials[0], 20.f);
-    //bodies.emplace_back(groundObjFileName, materials[0], 0.2f);
+    //bodies.emplace_back(sphereModesFileName, sphereObjFileName, materials[0], 1.f);
+    //bodies.emplace_back(rodModesFileName, rodObjFileName, materials[0], 20.f);
+    bodies.emplace_back(groundModesFileName, groundObjFileName, materials[0], 0.2f);
     bodies[0].x = 0.5f * (pMin + pMax) + ofVec3f(0.f, 2.f, 0.f);
-    bodies[0].rotate(PI / 6.f, ofVec3f(0.f, 0.f, 1.f));
-    bodies[0].rotate(-PI / 6.f, ofVec3f(1.f, 0.f, 0.f));
+    //bodies[0].rotate(PI / 6.f, ofVec3f(0.f, 0.f, 1.f));
+    //bodies[0].rotate(-PI / 6.f, ofVec3f(1.f, 0.f, 0.f));
+    bodies[0].L = ofVec3f(0.f, 0.f, 100000.f);
+    bodies[0].w = bodies[0].IInv * bodies[0].L;
+
 
     // initialize light
     ofSetSmoothLighting(true);
@@ -43,7 +51,9 @@ void ofApp::setup(){
     listenPos = ofVec3f(0.5f * (pMin.x + pMax.x), 0.5f * (pMin.y + pMax.y), BOX_ZMAX);
 
     ofSoundStreamSetup(CHANNELS, 0, AUDIO_SAMPLE_RATE, 256, 4);
-    //ofSetFrameRate(60);
+    ofSetFrameRate(100);
+
+    audioBuffer.pushZeros(AUDIO_SAMPLES_PAD);
 }
 
 //--------------------------------------------------------------
@@ -103,7 +113,7 @@ int ofApp::particleCollideWall(const ofVec3f& x, const ofVec3f& v, float tMin, f
 
 //--------------------------------------------------------------
 void ofApp::update(){
-    float dt = ofGetLastFrameTime();
+    float dt = 0.01f;   // ofGetLastFrameTime();
     
     // apply non-rotational forces to bodies
     for (RigidBody& body : bodies) {
@@ -111,15 +121,24 @@ void ofApp::update(){
         body.P = body.m * body.v;
     }
 
+
+    float qSums[AUDIO_SAMPLE_RATE];    // 1 second worth
+    memset(qSums, 0, AUDIO_SAMPLE_RATE*sizeof(float));
+    int qsComputed = 0;
+
     // compute collisions of vertices against walls
     for (RigidBody& body : bodies) {
 
+        int qsComputedThisBody = 0;
+
+        int i_c = 0;                            // index of the vertex that collides
+        ofVec3f ri_c(0.f, 0.f, 0.f);            // world ri of the vertex that collides
+        ofVec3f vi_c(0.f, 0.f, 0.f);            // world velocity of vertex that collides
+        ofVec3f impulse(0.f, 0.f, 0.f);
+
         float dtProcessed = 0.f;
-        ofVec3f dL(0.f, 0.f, 0.f);
         while (dtProcessed < dt) {
             // find vertex with earliest wall collision, if any
-            ofVec3f ri_c;                   // ri of the vertex that collides
-            ofVec3f vi_c;
             float dt_c = dt - dtProcessed;  // collision will occur dt_c from now
             int wallId = NONE;
             for (int i = 0; i < body.mesh.getNumVertices(); i++) {
@@ -131,6 +150,7 @@ void ofApp::update(){
                 if (id != NONE && t < dt_c) {
                     dt_c = t;
                     wallId = id;
+                    i_c = i;
                     ri_c = ri;
                     vi_c = vi;
                 }
@@ -140,8 +160,9 @@ void ofApp::update(){
                 dt_c = 0.f;
             } else {
                 body.step(dt_c);
+                qsComputedThisBody += body.audioStep(dt_c, impulse, i_c, 1.f / AUDIO_SAMPLE_RATE, &qSums[qsComputedThisBody]);
             }
-
+            
             // compute impulse imparted by collision at this vertex, if any,
             // and accumulate effect of impulse into P, L
             if (wallId != NONE) {
@@ -149,75 +170,115 @@ void ofApp::update(){
                 switch (wallId) {
                 case XMIN:
                     n = ofVec3f(1.f, 0.f, 0.f);
-                    printf("x0 ");
+                    //printf("x0 ");
                     break;
                 case XMAX:
                     n = ofVec3f(-1.f, 0.f, 0.f);
-                    printf("x1 ");
+                    //printf("x1 ");
                     break;
                 case YMIN:
                     n = ofVec3f(0.f, 1.f, 0.f);
-                    printf("y0 ");
+                    //printf("y0 ");
                     break;
                 case YMAX:
                     n = ofVec3f(0.f, -1.f, 0.f);
-                    printf("y1 ");
+                    //printf("y1 ");
                     break;
                 case ZMIN:
                     n = ofVec3f(0.f, 0.f, 1.f);
-                    printf("z0 ");
+                    //printf("z0 ");
                     break;
                 case ZMAX:
                     n = ofVec3f(0.f, 0.f, -1.f);
-                    printf("z1 ");
+                    //printf("z1 ");
                     break;
                 default:
                     break;
                 }
 
-                float e = 0.3f;
+                float e = 0.8f;
                 // NOTE: IInv will be different if body is stepped after finding ri_c, vi_c
                 float j = -(1 + e)*vi_c.dot(n) /
                     (  1.f / body.m + ( (body.IInv * (ri_c.crossed(n))).crossed(ri_c) ).dot(n)  );
-                j = min(j, (1+e) * abs(body.P.dot(n)));
+                //j = min(j, (1+e) * abs(body.P.dot(n)));
+                //j = 100000.f;
                 //printf("speed: %f\n", body.v.length());
                 //assert(j > 0.f);
 
+                impulse = j*n;
+
                 // update linear, angular momentum with impulse
-                body.P += j*n;
-                body.L += ri_c.crossed(j*n);
+                body.P += impulse;
+                body.L += ri_c.crossed(impulse);
                 // update linear, angular velocities from momentum
                 body.v = body.P / body.m;
                 body.w = body.IInv * body.L;
 
-                dL = ri_c.crossed(j*n);
+
+                ofVec3f ri = body.R * body.mesh.getVertex(i_c);
+                ofVec3f xi = body.x + ri;
+                ofVec3f vi = body.v + body.w.crossed(ri);
+
+                float eActual = vi.dot(n) / vi_c.dot(n);
+                printf("");
+
+            } else {
+                // no collision
+                body.stepW(dt_c);
             }
 
             dtProcessed += dt_c;
         }
 
+        if (qsComputedThisBody > qsComputed) {
+            qsComputed = qsComputedThisBody;
+        }
     }
 
-    float tempAudioBuffer[CHANNELS * AUDIO_SAMPLE_RATE];
-    memset(tempAudioBuffer, 0, CHANNELS * AUDIO_SAMPLE_RATE * sizeof(float));
-    int audioStart = CHANNELS * AUDIO_SAMPLE_RATE;
-    int audioEnd = -1;
 
-    // process and add audio samples if any were produced this frame
-    if (audioEnd - audioStart > 0) {
-        audioBufferLock.lock();
-        int additionalCapcityNeeded = audioEnd - audioBuffer.size();
-        if (additionalCapcityNeeded > 0) {
-            audioBuffer.pushZeros(additionalCapcityNeeded);
-            audioEnd = audioBuffer.size();  // in case audioBuffer couldn't push the requested amount of zeros 
+    // scale qSums to get audio samples
+    float qScale = 0.01f;
+    float audioSamples[CHANNELS * AUDIO_SAMPLE_RATE];   // 1 second worth
+    int audioSamplesComputed = 0;
+float maxSample = 0.f;
+float minSample = 0.f;
+    for (int k = 0; k < qsComputed; k++) {
+        for (int i = 0; i < CHANNELS; i++) {
+            audioSamples[audioSamplesComputed++] = qScale * qSums[k];
         }
-        auto iter = audioBuffer.at(audioStart);
-        for (int i = audioStart; i < audioEnd; i++) {
-            *iter += tempAudioBuffer[i];    // reverbAudioBuffer[i];
-            ++iter;
-        }
-        audioBufferLock.unlock();
+maxSample = max(maxSample, (qScale * qSums[k]));
+minSample = min(minSample, (qScale * qSums[k]));
     }
+if (maxSample > 0.0001f) {
+    printf("%f\t\t%f\n", maxSample, minSample);
+}
+    
+    // check if audioSamples has trailing zeros for sync adjustment
+    const float threshold = 0.000001f;
+    int trailingZerosStartAt = audioSamplesComputed;
+    while (trailingZerosStartAt > 0 && abs(audioSamples[trailingZerosStartAt - 1]) < threshold) {
+        trailingZerosStartAt--;
+    }
+    assert(trailingZerosStartAt % CHANNELS == 0);
+    
+    // push audio samples
+    int audioSamplesToPush = audioSamplesComputed;
+    audioBufferLock.lock();
+    int trailingZeros = audioSamplesComputed - trailingZerosStartAt;
+    if (trailingZeros > 0) {
+        int bufferSizeAfterPush = audioBuffer.size() + audioSamplesToPush;
+        int zerosToAdd = AUDIO_SAMPLES_PAD - bufferSizeAfterPush;
+        //printf("%d\n", zerosToAdd);
+        if (zerosToAdd > 0) {
+            audioSamplesToPush += zerosToAdd;
+            memset(&audioSamples[audioSamplesComputed], 0, zerosToAdd*sizeof(float));
+        } else if (zerosToAdd < 0) {
+            int zerosToRemove = -zerosToAdd;
+            audioSamplesToPush -= min(zerosToRemove, trailingZeros);
+        }
+    } 
+    audioBuffer.push(audioSamples, audioSamplesToPush);
+    audioBufferLock.unlock();
 }
 
 //--------------------------------------------------------------
@@ -271,24 +332,18 @@ void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key){
     switch (key) {
-    case '1':
-        bodies[0].x.x -= 1.f;
+    case '1':{
+        RigidBody& body = bodies[0];
+        int i = min((int)(ofRandomuf() * body.mesh.getNumVertices()), body.mesh.getNumVertices() - 1);
+        ofVec3f ri = body.R * body.mesh.getVertex(i);
+        ofVec3f n(0.f, -1.f, 0.f);
+        float j = 5000.f;
+        body.P += j*n;
+        body.L += ri.crossed(j*n);
+        body.v = body.P / body.m;
+        body.w = body.IInv * body.L;
         break;
-    case '2':
-        bodies[0].x.x += 1.f;
-        break;
-    case '3':
-        bodies[0].x.y -= 1.f;
-        break;
-    case '4':
-        bodies[0].x.y += 1.f;
-        break;
-    case '5':
-        bodies[0].x.z -= 1.f;
-        break;
-    case '6':
-        bodies[0].x.z += 1.f;
-        break;
+    }
     default:
         break;
     }

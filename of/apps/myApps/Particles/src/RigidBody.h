@@ -16,10 +16,14 @@ struct Material {
 
 struct RigidBody {
 public:
-    RigidBody(const string& fileName, const Material& material, float scale=1.f);
+    RigidBody(const string& modesFileName, const string& objFileName, const Material& material, float scale = 1.f);
 
     void rotate(float rad, const ofVec3f& axis);
+    
     void step(float dt);
+    void stepW(float dt);
+    
+    int audioStep(float dt, const ofVec3f& impulse, int vertex, float dt_q, float* qSum);
 
 public:
     ofMesh mesh;
@@ -42,6 +46,15 @@ public:
     ofMatrix3x3 RInv;
     ofVec3f v;          // linear velocity      v = P / m
     ofVec3f w;          // angular velocity     w = IInv * L
+
+
+    // Modes (Constant)
+    vector<vector<ofVec3f>> phi;    // eigenvectors
+    vector<float> omega;            // natural frequencies
+
+    // Modal amplitudes
+    vector<float> qq[3];        // 3 most recent q vectors: q(k-2),q(k-1),q(k)
+    int qkAt;                   // index where q(k) is stored
 };
 
 #endif
