@@ -239,10 +239,10 @@ RigidBody::RigidBody(const string& modesFileName, const string& objFileName, con
     IInv = IBodyInv;
 
 
-    readModes(modesFileName, &phi, &omega);
+    /*readModes(modesFileName, &phi, &omega);
     assert(phi.size() == omega.size());
     assert(phi[0].size() == mesh.getNumVertices());
-
+    */
     // initialize modal amplitude vectors to 0s
     for (int k = 0; k < 3; k++) {
         qq[k] = vector<float>(omega.size(), 0.f);
@@ -255,7 +255,8 @@ void RigidBody::rotate(float rad, const ofVec3f& axis) {
     float halfAngle = 0.5f * rad;
     float sin = sinf(halfAngle);
     ofQuaternion dq = ofQuaternion(sin*a.x, sin*a.y, sin*a.z, cosf(halfAngle));
-    q = dq * q;
+    //q = dq * q;
+    q *= dq;    // NOTE: openFrameworks quaternion multiply is flipped!!!!
     q.normalize();
 
     R.setRotate(q);
@@ -273,7 +274,8 @@ void RigidBody::step(float dt) {
     ofVec3f axis = w / wMag;
     float sin = sinf(halfAngle);
     ofQuaternion dq = ofQuaternion(sin*axis.x, sin*axis.y, sin*axis.z, cosf(halfAngle));
-    q = dq * q;
+    //q = dq * q;
+    q *= dq;    // NOTE: openFrameworks quaternion multiply is flipped!!!!
     q.normalize();
     R.setRotate(q);
     RInv = R.transposed();
@@ -351,4 +353,12 @@ int RigidBody::audioStep(float dt, const ofVec3f& impulse, int vertex, float dt_
     }
 
     return qsToCompute;
+}
+
+ofVec3f RigidBody::getXi(int i) const {
+    return x + R * mesh.getVertex(i);
+}
+
+ofVec3f RigidBody::getVi(int i) const {
+    return v + w.crossed(R * mesh.getVertex(i));
 }

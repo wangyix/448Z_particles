@@ -25,6 +25,9 @@ public:
     
     int audioStep(float dt, const ofVec3f& impulse, int vertex, float dt_q, float* qSum);
 
+    ofVec3f getXi(int i) const;
+    ofVec3f getVi(int i) const;
+
 public:
     ofMesh mesh;
     const Material& material;

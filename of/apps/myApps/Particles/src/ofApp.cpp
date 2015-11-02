@@ -51,7 +51,7 @@ void ofApp::setup(){
     listenPos = ofVec3f(0.5f * (pMin.x + pMax.x), 0.5f * (pMin.y + pMax.y), BOX_ZMAX);
 
     ofSoundStreamSetup(CHANNELS, 0, AUDIO_SAMPLE_RATE, 256, 4);
-    ofSetFrameRate(100);
+    //ofSetFrameRate(100);
 
     audioBuffer.pushZeros(AUDIO_SAMPLES_PAD);
 }
@@ -62,44 +62,44 @@ void ofApp::exit() {
 
 enum WALL_ID{ NONE=0, XMIN=1, XMAX=2, YMIN=3, YMAX=4, ZMIN=5, ZMAX=6 };
 
-int ofApp::particleCollideWall(const ofVec3f& x, const ofVec3f& v, float tMin, float tMax, float* tc) {
+int ofApp::particleCollideWall(const ofVec3f& p, const ofVec3f& v, float tMin, float tMax, float* tc) {
     assert(tMax > 0.f);
     float tt = tMax;
     int id = NONE;
     if (v.x > 0.f) {
-        float t = (pMax.x - x.x) / v.x;
+        float t = (pMax.x - p.x) / v.x;
         if (tMin < t && t < tt) {
             tt = t;
             id = XMAX;
         }
     } else if (v.x < 0.f) {
-        float t = (pMin.x - x.x) / v.x;
+        float t = (pMin.x - p.x) / v.x;
         if (tMin < t && t < tt) {
             tt = t;
             id = XMIN;
         }
     }
     if (v.y > 0.f) {
-        float t = (pMax.y - x.y) / v.y;
+        float t = (pMax.y - p.y) / v.y;
         if (tMin < t && t < tt) {
             tt = t;
             id = YMAX;
         }
     } else if (v.y < 0.f) {
-        float t = (pMin.y - x.y) / v.y;
+        float t = (pMin.y - p.y) / v.y;
         if (tMin < t && t < tt) {
             tt = t;
             id = YMIN;
         }
     }
     if (v.z > 0.f) {
-        float t = (pMax.z - x.z) / v.z;
+        float t = (pMax.z - p.z) / v.z;
         if (tMin < t && t < tt) {
             tt = t;
             id = ZMAX;
         }
     } else if (v.z < 0.f) {
-        float t = (pMin.z - x.z) / v.z;
+        float t = (pMin.z - p.z) / v.z;
         if (tMin < t && t < tt) {
             tt = t;
             id = ZMIN;
@@ -111,16 +111,17 @@ int ofApp::particleCollideWall(const ofVec3f& x, const ofVec3f& v, float tMin, f
     return id;
 }
 
+
 //--------------------------------------------------------------
 void ofApp::update(){
-    float dt = 0.01f;   // ofGetLastFrameTime();
-    
+    float dt = min(0.001, ofGetLastFrameTime());
+    if (dt <= 0.f) return;
+
     // apply non-rotational forces to bodies
     for (RigidBody& body : bodies) {
         body.v += gravity * dt;
         body.P = body.m * body.v;
     }
-
 
     float qSums[AUDIO_SAMPLE_RATE];    // 1 second worth
     memset(qSums, 0, AUDIO_SAMPLE_RATE*sizeof(float));
@@ -136,17 +137,16 @@ void ofApp::update(){
         ofVec3f vi_c(0.f, 0.f, 0.f);            // world velocity of vertex that collides
         ofVec3f impulse(0.f, 0.f, 0.f);
 
-        float dtProcessed = 0.f;
-        while (dtProcessed < dt) {
+        while (true) {
             // find vertex with earliest wall collision, if any
-            float dt_c = dt - dtProcessed;  // collision will occur dt_c from now
+            float dt_c = dt;  // collision will occur dt_c from now
             int wallId = NONE;
             for (int i = 0; i < body.mesh.getNumVertices(); i++) {
                 ofVec3f ri = body.R * body.mesh.getVertex(i);
                 ofVec3f xi = body.x + ri;
-                ofVec3f vi = body.v + body.w.crossed(ri);
+                ofVec3f vi = body.v + (body.w.crossed(ri));
                 float t;
-                int id = particleCollideWall(xi, vi, -dt, dt - dtProcessed, &t);
+                int id = particleCollideWall(xi, vi, -100000000.f, dt, &t);
                 if (id != NONE && t < dt_c) {
                     dt_c = t;
                     wallId = id;
@@ -154,13 +154,6 @@ void ofApp::update(){
                     ri_c = ri;
                     vi_c = vi;
                 }
-            }
-            //assert(dt_c > 0.f);
-            if (dt_c <= 0.f) {
-                dt_c = 0.f;
-            } else {
-                body.step(dt_c);
-                qsComputedThisBody += body.audioStep(dt_c, impulse, i_c, 1.f / AUDIO_SAMPLE_RATE, &qSums[qsComputedThisBody]);
             }
             
             // compute impulse imparted by collision at this vertex, if any,
@@ -196,46 +189,37 @@ void ofApp::update(){
                     break;
                 }
 
-                float e = 0.8f;
-                // NOTE: IInv will be different if body is stepped after finding ri_c, vi_c
-                float j = -(1 + e)*vi_c.dot(n) /
+                const float e = 0.5f;
+                float j = -(1.f + e)*(vi_c.dot(n)) /
                     (  1.f / body.m + ( (body.IInv * (ri_c.crossed(n))).crossed(ri_c) ).dot(n)  );
-                //j = min(j, (1+e) * abs(body.P.dot(n)));
-                //j = 100000.f;
-                //printf("speed: %f\n", body.v.length());
-                //assert(j > 0.f);
 
                 impulse = j*n;
 
                 // update linear, angular momentum with impulse
                 body.P += impulse;
-                body.L += ri_c.crossed(impulse);
+                body.L += (ri_c.crossed(impulse));
                 // update linear, angular velocities from momentum
-                body.v = body.P / body.m;
-                body.w = body.IInv * body.L;
-
-
-                ofVec3f ri = body.R * body.mesh.getVertex(i_c);
-                ofVec3f xi = body.x + ri;
-                ofVec3f vi = body.v + body.w.crossed(ri);
-
-                float eActual = vi.dot(n) / vi_c.dot(n);
-                printf("");
+                body.v = (body.P / body.m);
+                body.w = (body.IInv * body.L);
 
             } else {
                 // no collision
-                body.stepW(dt_c);
+                break;
             }
-
-            dtProcessed += dt_c;
         }
+
+        body.step(dt);
+        body.stepW(dt);
+
+        // need to use net impulse applied over all of dt!!!
+        //qsComputedThisBody += body.audioStep(dt, impulse, i_c, 1.f / AUDIO_SAMPLE_RATE, &qSums[qsComputedThisBody]);
 
         if (qsComputedThisBody > qsComputed) {
             qsComputed = qsComputedThisBody;
         }
     }
 
-
+    /*
     // scale qSums to get audio samples
     float qScale = 0.01f;
     float audioSamples[CHANNELS * AUDIO_SAMPLE_RATE];   // 1 second worth
@@ -250,7 +234,7 @@ maxSample = max(maxSample, (qScale * qSums[k]));
 minSample = min(minSample, (qScale * qSums[k]));
     }
 if (maxSample > 0.0001f) {
-    printf("%f\t\t%f\n", maxSample, minSample);
+    //printf("%f\t\t%f\n", maxSample, minSample);
 }
     
     // check if audioSamples has trailing zeros for sync adjustment
@@ -279,6 +263,33 @@ if (maxSample > 0.0001f) {
     } 
     audioBuffer.push(audioSamples, audioSamplesToPush);
     audioBufferLock.unlock();
+        */
+}
+
+static void drawCylinder(const ofVec3f& p1, const ofVec3f& p2) {
+    ofVec3f targetDir = p2 - p1;
+    float l = targetDir.length();
+    targetDir /= l;
+
+    ofCylinderPrimitive cylinder;
+    cylinder.setPosition(0.f, 0.f, 0.f);
+    cylinder.set(0.1f * PIXELS_PER_METER, l * PIXELS_PER_METER);
+
+    ofVec3f cylDir = ofVec3f(0.f, 1.f, 0.f);
+    ofVec3f rotateAxis = cylDir.crossed(targetDir);
+    float degreesRotate = acosf(cylDir.dot(targetDir)) / PI * 180.f;
+
+    cylinder.rotate(degreesRotate, rotateAxis);
+    cylinder.setPosition(0.5f * (p1 + p2) * PIXELS_PER_METER);
+    ofSetColor(0, 200, 200);
+    cylinder.draw();
+}
+
+static void drawPoint(const ofVec3f& p, float size, const ofColor& color) {
+    ofBoxPrimitive box(size*PIXELS_PER_METER, size*PIXELS_PER_METER, size*PIXELS_PER_METER);
+    box.setPosition(p*PIXELS_PER_METER);
+    ofSetColor(color);
+    box.draw();
 }
 
 //--------------------------------------------------------------
@@ -300,8 +311,6 @@ void ofApp::draw(){
     for (int i = 0; i < bodies.size(); i++) {
         ofSetColor(bodies[i].material.color);
         ofPushMatrix();
-        //ofScale(PIXELS_PER_METER, PIXELS_PER_METER, PIXELS_PER_METER);
-        //ofTranslate(bodies[i].x);
         const ofMatrix3x3& R = bodies[i].R;
         const ofVec3f& T = bodies[i].x;
         ofMatrix4x4 objToWorld(R.a, R.d, R.g, 0.f,
@@ -331,22 +340,6 @@ void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
 
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key){
-    switch (key) {
-    case '1':{
-        RigidBody& body = bodies[0];
-        int i = min((int)(ofRandomuf() * body.mesh.getNumVertices()), body.mesh.getNumVertices() - 1);
-        ofVec3f ri = body.R * body.mesh.getVertex(i);
-        ofVec3f n(0.f, -1.f, 0.f);
-        float j = 5000.f;
-        body.P += j*n;
-        body.L += ri.crossed(j*n);
-        body.v = body.P / body.m;
-        body.w = body.IInv * body.L;
-        break;
-    }
-    default:
-        break;
-    }
 }
 
 //--------------------------------------------------------------
