@@ -31,12 +31,12 @@ void ofApp::setup(){
 
     // initialize rigid bodies
     //bodies.emplace_back(sphereModesFileName, sphereObjFileName, materials[0], 1.f);
-    //bodies.emplace_back(rodModesFileName, rodObjFileName, materials[0], 20.f);
-    bodies.emplace_back(groundModesFileName, groundObjFileName, materials[0], 0.2f);
+    bodies.emplace_back(rodModesFileName, rodObjFileName, materials[0], 20.f);
+    //bodies.emplace_back(groundModesFileName, groundObjFileName, materials[0], 0.2f);
     bodies[0].x = 0.5f * (pMin + pMax) + ofVec3f(0.f, 2.f, 0.f);
     //bodies[0].rotate(PI / 6.f, ofVec3f(0.f, 0.f, 1.f));
     //bodies[0].rotate(-PI / 6.f, ofVec3f(1.f, 0.f, 0.f));
-    bodies[0].L = ofVec3f(0.f, 0.f, 100000.f);
+    //bodies[0].L = ofVec3f(0.f, 0.f, 100000.f);
     bodies[0].w = bodies[0].IInv * bodies[0].L;
 
 
@@ -111,10 +111,9 @@ int ofApp::particleCollideWall(const ofVec3f& p, const ofVec3f& v, float tMin, f
     return id;
 }
 
-
 //--------------------------------------------------------------
 void ofApp::update(){
-    float dt = min(0.001, ofGetLastFrameTime());
+    float dt = min(0.01, ofGetLastFrameTime());
     if (dt <= 0.f) return;
 
     // apply non-rotational forces to bodies
@@ -130,13 +129,11 @@ void ofApp::update(){
     // compute collisions of vertices against walls
     for (RigidBody& body : bodies) {
 
-        int qsComputedThisBody = 0;
+        vector<VertexImpulse> impulses;
 
         int i_c = 0;                            // index of the vertex that collides
         ofVec3f ri_c(0.f, 0.f, 0.f);            // world ri of the vertex that collides
         ofVec3f vi_c(0.f, 0.f, 0.f);            // world velocity of vertex that collides
-        ofVec3f impulse(0.f, 0.f, 0.f);
-
         while (true) {
             // find vertex with earliest wall collision, if any
             float dt_c = dt;  // collision will occur dt_c from now
@@ -193,7 +190,7 @@ void ofApp::update(){
                 float j = -(1.f + e)*(vi_c.dot(n)) /
                     (  1.f / body.m + ( (body.IInv * (ri_c.crossed(n))).crossed(ri_c) ).dot(n)  );
 
-                impulse = j*n;
+                ofVec3f impulse = j*n;
 
                 // update linear, angular momentum with impulse
                 body.P += impulse;
@@ -201,6 +198,8 @@ void ofApp::update(){
                 // update linear, angular velocities from momentum
                 body.v = (body.P / body.m);
                 body.w = (body.IInv * body.L);
+
+                impulses.emplace_back(i_c, impulse);
 
             } else {
                 // no collision
@@ -211,17 +210,16 @@ void ofApp::update(){
         body.step(dt);
         body.stepW(dt);
 
-        // need to use net impulse applied over all of dt!!!
-        //qsComputedThisBody += body.audioStep(dt, impulse, i_c, 1.f / AUDIO_SAMPLE_RATE, &qSums[qsComputedThisBody]);
+        int qsComputedThisBody = body.audioStep(dt, impulses, 1.f / AUDIO_SAMPLE_RATE, qSums);
 
         if (qsComputedThisBody > qsComputed) {
             qsComputed = qsComputedThisBody;
         }
     }
 
-    /*
+
     // scale qSums to get audio samples
-    float qScale = 0.01f;
+    float qScale = 0.03f;
     float audioSamples[CHANNELS * AUDIO_SAMPLE_RATE];   // 1 second worth
     int audioSamplesComputed = 0;
 float maxSample = 0.f;
@@ -233,8 +231,8 @@ float minSample = 0.f;
 maxSample = max(maxSample, (qScale * qSums[k]));
 minSample = min(minSample, (qScale * qSums[k]));
     }
-if (maxSample > 0.0001f) {
-    //printf("%f\t\t%f\n", maxSample, minSample);
+if (maxSample > 0.1f) {
+    printf("%f\t\t%f\n", maxSample, minSample);
 }
     
     // check if audioSamples has trailing zeros for sync adjustment
@@ -263,7 +261,6 @@ if (maxSample > 0.0001f) {
     } 
     audioBuffer.push(audioSamples, audioSamplesToPush);
     audioBufferLock.unlock();
-        */
 }
 
 static void drawCylinder(const ofVec3f& p1, const ofVec3f& p2) {

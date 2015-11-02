@@ -14,6 +14,13 @@ struct Material {
     ofColor color;
 };
 
+struct VertexImpulse {
+    VertexImpulse(int vertex, const ofVec3f& impulse)
+        : vertex(vertex), impulse(impulse) {}
+    int vertex;
+    ofVec3f impulse;
+};
+
 struct RigidBody {
 public:
     RigidBody(const string& modesFileName, const string& objFileName, const Material& material, float scale = 1.f);
@@ -23,7 +30,7 @@ public:
     void step(float dt);
     void stepW(float dt);
     
-    int audioStep(float dt, const ofVec3f& impulse, int vertex, float dt_q, float* qSum);
+    int audioStep(float dt, const vector<VertexImpulse>& impulses, float dt_q, float* qSum);
 
     ofVec3f getXi(int i) const;
     ofVec3f getVi(int i) const;

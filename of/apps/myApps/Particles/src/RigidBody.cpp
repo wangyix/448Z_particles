@@ -239,10 +239,10 @@ RigidBody::RigidBody(const string& modesFileName, const string& objFileName, con
     IInv = IBodyInv;
 
 
-    /*readModes(modesFileName, &phi, &omega);
+    readModes(modesFileName, &phi, &omega);
     assert(phi.size() == omega.size());
     assert(phi[0].size() == mesh.getNumVertices());
-    */
+    
     // initialize modal amplitude vectors to 0s
     for (int k = 0; k < 3; k++) {
         qq[k] = vector<float>(omega.size(), 0.f);
@@ -304,19 +304,24 @@ void RigidBody::stepW(float dt) {
     w = R * wBody;
 }
 
-int RigidBody::audioStep(float dt, const ofVec3f& impulse, int vertex, float dt_q, float* qSum) {
+int RigidBody::audioStep(float dt, const vector<VertexImpulse>& impulses, float dt_q, float* qSum) {
 
     float h = dt_q;
 
     // damping params
     const float alpha = 0.f;
-    //const float beta = 0.0000001f;         // sphere
-    const float beta = 0.00001f;            // ground
+    //const float beta = 0.0000001f;        // sphere
+    //const float beta = 0.00001f;          // ground
+    const float beta = 0.00000000001f;          // rod
 
-    // impulse applied to vertex will be spread out over one 
-    // time-step of q as a constant force 
-    ofVec3f F = (RInv * impulse) / h;
+    // all impulses will be spread out over the first time-step of q as constant forces.
+    // convert the impulses to forces in bodyspace.
+    vector<ofVec3f> forces;
+    for (const VertexImpulse& vim : impulses) {
+        forces.push_back((RInv * vim.impulse) / h);
+    }
 
+    // compute q vectors and their sums
     int qsToCompute = max((int)(dt / h), 1);
     for (int k = 0; k < qsToCompute; k++) {
         qkAt = (qkAt + 1) % 3;
@@ -337,10 +342,16 @@ int RigidBody::audioStep(float dt, const ofVec3f& impulse, int vertex, float dt_
 
                 qk[i] = 2.f*ei*cosf(thetai)*qk1[i] - ei*ei*qk2[i];
 
-                // impulse is applied evenly over the first time-step; no force applied for other time-steps
+                // impulses are applied evenly over the first time-step; no force applied for other time-steps
                 if (k == 0) {
+                    float phi_i_dot_F = 0.f;
+                    for (int j = 0; j < impulses.size(); j++) {
+                        int vertex = impulses[j].vertex;
+                        ofVec3f force = forces[j];
+                        phi_i_dot_F += phi[i][vertex].dot(force);
+                    }
                     qk[i] += (2.f*(ei*cosf(thetai + gammai) - ei*ei*cosf(2.f*thetai + gammai)) / (3.f*wi*wdi))
-                        * (phi[i][vertex].dot(F));
+                        * (phi_i_dot_F);
                 }
             } else {
                 qk[i] = 0.f;
