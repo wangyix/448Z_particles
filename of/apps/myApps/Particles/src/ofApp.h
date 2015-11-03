@@ -15,6 +15,7 @@
 
 #define AUDIO_SAMPLE_RATE 44100
 #define CHANNELS 2
+#define BUFFER_SIZE 256
 #define AUDIO_BUFFER_PAD_TIME 0.01   // in seconds
 
 #define NUM_MATERIALS 4
@@ -60,12 +61,13 @@ private:
     RingBuffer<float, CHANNELS * AUDIO_SAMPLE_RATE> audioBuffer;
     mutex audioBufferLock;
 
-    RingBuffer<float, CHANNELS * AUDIO_SAMPLE_RATE> audioBuffer2;
-    mutex audioBuffer2Lock;
+    RingBuffer<float, CHANNELS * AUDIO_SAMPLE_RATE> accelAudioBuffer;
+    mutex accelAudioBufferLock;
 
     ofVec3f listenPos;
 
     ofMatrix4x4 viewMatrix;
 
     float qScale;
+    float accelAudioScale;
 };

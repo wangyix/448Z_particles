@@ -215,7 +215,7 @@ static void signedMoment2(const ofMeshFace& tri,
 
 RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, float alpha, float beta,
                      const string& objFileName, const Material& material, float sizeScale,
-                     bool isSphere, float sphereRadius)
+                     bool isSphere)
     :
     material(material),
     x(0.f, 0.f, 0.f),
@@ -228,8 +228,7 @@ RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, 
     w(0.f, 0.f, 0.f),
     alpha(alpha),
     beta(beta),
-    isSphere(isSphere),
-    r(sphereRadius)
+    isSphere(isSphere)
 {
     readObj(objFileName, sizeScale, &mesh);
 

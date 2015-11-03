@@ -36,7 +36,7 @@ void ofApp::setup(){
     // initialize rigid bodies
     //bodies.push_back(RigidBody(groundModesFileName, 2e11f, 0.4f, 1.f, 50.f, 1e-6f, groundObjFileName, PLASTIC_MATERIAL, 0.005f));
     //bodies.push_back(RigidBody(rodModesFileName, 7e10f, 0.3f, 1.f, 50.f, 1e-11f, rodObjFileName, PLASTIC_MATERIAL, 1.f));
-    bodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.05f));
+    bodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.05f, true));
 
 
     bodies[0].x = 0.25f * pMin + 0.75f * pMax;// +ofVec3f(0.f, 2.f, 0.f);
@@ -62,12 +62,13 @@ void ofApp::setup(){
 
     listenPos = ofVec3f(0.5f * (pMin.x + pMax.x), 0.5f * (pMin.y + pMax.y), BOX_ZMAX);
 
-    ofSoundStreamSetup(CHANNELS, 0, AUDIO_SAMPLE_RATE, 256, 4);
+    ofSoundStreamSetup(CHANNELS, 0, AUDIO_SAMPLE_RATE, BUFFER_SIZE, 4);
     //ofSetFrameRate(100);
 
     audioBuffer.pushZeros(AUDIO_SAMPLES_PAD);
 
     qScale = 250.f;
+    accelAudioScale = 0.08f;
 }
 
 //--------------------------------------------------------------
@@ -175,7 +176,8 @@ void ofApp::update(){
 
     float accelAudioSamples[SECONDS_TO_SAMPLES(0.5)];
     memset(accelAudioSamples, 0, SECONDS_TO_SAMPLES(0.5)*sizeof(float));
-    int accelAudioSamplesCount = 0;
+    int accelAudioStart = SECONDS_TO_SAMPLES(0.5);
+    int accelAudioEnd = 0;
 
     // compute collisions of vertices against walls
     for (RigidBody& body : bodies) {
@@ -279,16 +281,18 @@ void ofApp::update(){
                 float SConst = computeSConst(body.x, body.r, body.m, listenPos, tau, vim.impulse);
 
                 // retarded time
-                int audioStart = SECONDS_TO_SAMPLES((vim.x - listenPos).length() / 330.f);
-                int audioEnd = audioStart;
+                int i = SECONDS_TO_SAMPLES((vim.x - listenPos).length() / 330.f);
+                if (i < accelAudioStart) {
+                    accelAudioStart = i;
+                }
                 for (float t = 0.f; t < tau; t += 1.f / AUDIO_SAMPLE_RATE) {
-                    float sample = SConst * (t - 0.5f * tau) * sin(PI*t / tau);
+                    float sample = (accelAudioScale * SConst) * (t - 0.5f * tau) * sin(PI*t / tau);
                     for (int j = 0; j < CHANNELS; j++) {
-                        accelAudioSamples[audioEnd++] += sample;
+                        accelAudioSamples[i++] += sample;
                     }
                 }
-                if (audioEnd > accelAudioSamplesCount) {
-                    accelAudioSamplesCount = audioEnd;
+                if (i > accelAudioEnd) {
+                    accelAudioEnd = i;
                 }
             }
         }
@@ -347,7 +351,20 @@ if (maxSample > 1.f || minSample < -1.f) {
 
 
     // push acceleration noise audio samples
-    
+    if (accelAudioEnd > accelAudioStart) {
+        accelAudioBufferLock.lock();
+        int additionalCapcityNeeded = accelAudioEnd - accelAudioBuffer.size();
+        if (additionalCapcityNeeded > 0) {
+            accelAudioBuffer.pushZeros(additionalCapcityNeeded);
+            accelAudioEnd = accelAudioBuffer.size();  // in case audioBuffer couldn't push the requested amount of zeros 
+        }
+        auto iter = accelAudioBuffer.at(accelAudioStart);
+        for (int i = accelAudioStart; i < accelAudioEnd; i++) {
+            *iter += accelAudioSamples[i];
+            ++iter;
+        }
+        accelAudioBufferLock.unlock();
+    }
 }
 
 static void drawCylinder(const ofVec3f& p1, const ofVec3f& p2) {
@@ -413,12 +430,31 @@ void ofApp::draw(){
 
 //--------------------------------------------------------------
 void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
-    audioBufferLock.lock();
-    int samplesPopped = audioBuffer.pop(output, bufferSize * CHANNELS);
-    audioBufferLock.unlock();
-    int samplesRemaining = CHANNELS * bufferSize - samplesPopped;
-    if (samplesRemaining > 0) {
-        memset(&output[samplesPopped], 0, samplesRemaining * sizeof(float));
+    float buffer1[CHANNELS * BUFFER_SIZE];
+    float buffer2[CHANNELS * BUFFER_SIZE];
+
+    {
+        audioBufferLock.lock();
+        int samplesPopped = audioBuffer.pop(buffer1, bufferSize * CHANNELS);
+        audioBufferLock.unlock();
+        int samplesRemaining = CHANNELS * bufferSize - samplesPopped;
+        if (samplesRemaining > 0) {
+            memset(&buffer1[samplesPopped], 0, samplesRemaining * sizeof(float));
+        }
+    }
+    {
+        accelAudioBufferLock.lock();
+        int samplesPopped = accelAudioBuffer.pop(buffer2, bufferSize * CHANNELS);
+        accelAudioBufferLock.unlock();
+        int samplesRemaining = CHANNELS * bufferSize - samplesPopped;
+        if (samplesRemaining > 0) {
+            memset(&buffer2[samplesPopped], 0, samplesRemaining * sizeof(float));
+        }
+    }
+
+    // add samples from modal audio buffer and acceleration audio buffer
+    for (int i = 0; i < CHANNELS * BUFFER_SIZE; i++) {
+        output[i] = buffer1[i] + buffer2[i];
     }
 }
 
@@ -447,7 +483,6 @@ void ofApp::keyPressed(int key){
         beta *= 10.f;
         printf("beta = %e\n", beta);
         break;
-
     case '5':
         alpha /= 1.05f;
         printf("alpha = %e\n", alpha);
@@ -472,6 +507,14 @@ void ofApp::keyPressed(int key){
     case '=':
         qScale *= 1.1f;
         printf("qScale = %f\n", qScale);
+        break;
+    case ',':
+        accelAudioScale /= 1.1f;
+        printf("accelAudioScale = %f\n", accelAudioScale);
+        break;
+    case '.':
+        accelAudioScale *= 1.1f;
+        printf("accelAudioScale = %f\n", accelAudioScale);
         break;
     default:
         break;

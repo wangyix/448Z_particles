@@ -27,7 +27,7 @@ struct RigidBody {
 public:
     RigidBody(const string& modesFileName, float E, float nu, float rho, float alpha, float beta, 
               const string& objFileName, const Material& material, float sizeScale,
-              bool isSphere = false, float sphereRadius = 0.f);
+              bool isSphere = false);
 
     void rotate(float rad, const ofVec3f& axis);
     
