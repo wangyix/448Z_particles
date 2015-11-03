@@ -214,7 +214,8 @@ static void signedMoment2(const ofMeshFace& tri,
 }
 
 RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, float alpha, float beta,
-                     const string& objFileName, const Material& material, float sizeScale)
+                     const string& objFileName, const Material& material, float sizeScale,
+                     bool isSphere, float sphereRadius)
     :
     material(material),
     x(0.f, 0.f, 0.f),
@@ -226,7 +227,9 @@ RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, 
     v(0.f, 0.f, 0.f),
     w(0.f, 0.f, 0.f),
     alpha(alpha),
-    beta(beta) 
+    beta(beta),
+    isSphere(isSphere),
+    r(sphereRadius)
 {
     readObj(objFileName, sizeScale, &mesh);
 
@@ -241,12 +244,12 @@ RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, 
         Mz += signedMoment(tri, 2, 1);
     }
 
-    m = material.rho * abs(M);          // mass
-    ofVec3f r = ofVec3f(Mx, My, Mz) / M;    // center of mass
+    m = material.rho * abs(M);  // mass
+    ofVec3f centerOfMass = ofVec3f(Mx, My, Mz) / M;
 
     // move mesh so its center of mass is at origin
     for (int i = 0; i < mesh.getNumVertices(); i++) {
-        mesh.setVertex(i, mesh.getVertex(i) - r);
+        mesh.setVertex(i, mesh.getVertex(i) - centerOfMass);
     }
     triangles = &mesh.getUniqueFaces();
     
@@ -290,6 +293,21 @@ RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, 
     }
     qkAt = 0;
 
+
+    // determine sphere radius if this is a sphere
+    if (isSphere) {
+        r = 0.f;
+        for (int i = 0; i < mesh.getNumVertices(); i++) {
+            const ofVec3f& vertex = mesh.getVertex(i);
+            float dist = vertex.length();
+            if (dist > r) {
+                r = dist;
+            }
+        }
+    }
+
+
+    // FOR TUNING DAMPING PARAMS
     topModes = true;
     nModesOnly = 94;
 }

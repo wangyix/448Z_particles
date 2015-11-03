@@ -15,16 +15,19 @@ struct Material {
 };
 
 struct VertexImpulse {
-    VertexImpulse(int vertex, const ofVec3f& impulse)
-        : vertex(vertex), impulse(impulse) {}
+    VertexImpulse(int vertex, const ofVec3f& impulse, const ofVec3f& x, float vn)
+        : vertex(vertex), impulse(impulse), x(x), vn(vn) {}
     int vertex;
     ofVec3f impulse;
+    ofVec3f x;      // position where impulse was applied
+    float vn;       // normal velocity
 };
 
 struct RigidBody {
 public:
     RigidBody(const string& modesFileName, float E, float nu, float rho, float alpha, float beta, 
-              const string& objFileName, const Material& material, float sizeScale);
+              const string& objFileName, const Material& material, float sizeScale,
+              bool isSphere = false, float sphereRadius = 0.f);
 
     void rotate(float rad, const ofVec3f& axis);
     
@@ -74,6 +77,10 @@ public:
     // Damping parameters
     const float alpha;
     const float beta;
+
+    // Sphere extension for acceleration noise
+    const bool isSphere;
+    float r;
 
     bool topModes;
     int nModesOnly;

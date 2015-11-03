@@ -58,7 +58,10 @@ private:
     ofVec3f attractPos;
     
     RingBuffer<float, CHANNELS * AUDIO_SAMPLE_RATE> audioBuffer;
-    std::mutex audioBufferLock;
+    mutex audioBufferLock;
+
+    RingBuffer<float, CHANNELS * AUDIO_SAMPLE_RATE> audioBuffer2;
+    mutex audioBuffer2Lock;
 
     ofVec3f listenPos;
 

@@ -56,7 +56,7 @@ public:
     };
 
 public:
-    RingBuffer() : rIndex(0), wIndex(0) {}
+    RingBuffer() : values(N+1), rIndex(0), wIndex(0) {}
 
     size_t push(const T* buffer, size_t n) {
         n = std::min(n, capacityRemaining());
@@ -119,7 +119,8 @@ public:
         return Iterator(&values[0], N, (rIndex + i) % (N + 1));
     }
 private:
-    T values[N + 1];
+    //T values[N + 1];
+    vector<T> values;
     size_t rIndex;
     size_t wIndex;
 };
