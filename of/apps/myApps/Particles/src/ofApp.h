@@ -11,7 +11,7 @@
 #define BOX_ZMIN (-400.0 / PIXELS_PER_METER)
 #define BOX_ZMAX 0.0
 
-#define GRAVITY_MAG 4.0
+#define GRAVITY_MAG 2.0
 
 #define AUDIO_SAMPLE_RATE 44100
 #define CHANNELS 2
@@ -19,7 +19,7 @@
 
 #define NUM_MATERIALS 4
 
-#define MOUSE_CURSOR_MASS 80.0    // how attractive the cursor is when held down; unit is abitrary
+#define MOUSE_CURSOR_MASS 1.0    // how attractive the cursor is when held down; unit is abitrary
 
 
 class ofApp : public ofBaseApp{

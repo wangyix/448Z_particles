@@ -30,12 +30,14 @@ void ofApp::setup(){
     windowResized(ofGetWidth(), ofGetHeight());
 
     // initialize rigid bodies
-    //bodies.push_back(RigidBody(groundModesFileName, 2e11f, 0.4f, 1.f, 50.f, 1e-11f, groundObjFileName, PLASTIC_MATERIAL, 0.005f));
-    bodies.push_back(RigidBody(rodModesFileName, 7e10f, 0.3f, 1.f, 50.f, 1e-11f, rodObjFileName, PLASTIC_MATERIAL, 1.f));
-    //bodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 50.f, 1e-6f, sphereObjFileName, PLASTIC_MATERIAL, 0.05f));
+    bodies.push_back(RigidBody(groundModesFileName, 2e11f, 0.4f, 1.f, 50.f, 1e-6f, groundObjFileName, PLASTIC_MATERIAL, 0.005f));
+    //bodies.push_back(RigidBody(rodModesFileName, 7e10f, 0.3f, 1.f, 50.f, 1e-11f, rodObjFileName, PLASTIC_MATERIAL, 1.f));
+    bodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 50.f, 1e-5f, sphereObjFileName, PLASTIC_MATERIAL, 0.05f));
 
 
-    bodies[0].x = 0.3f * pMin + 0.7f * pMax;// +ofVec3f(0.f, 2.f, 0.f);
+    bodies[0].x = 0.25f * pMin + 0.75f * pMax;// +ofVec3f(0.f, 2.f, 0.f);
+    bodies[1].x = 0.5f * pMin + 0.5f * pMax;
+    //bodies[2].x = 0.75f * pMin + 0.25f * pMax;
     //bodies[0].rotate(PI / 6.f, ofVec3f(0.f, 0.f, 1.f));
     //bodies[0].rotate(-PI / 6.f, ofVec3f(1.f, 0.f, 0.f));
     //bodies[0].L = ofVec3f(0.f, 0.f, 1000.f);
@@ -61,7 +63,7 @@ void ofApp::setup(){
 
     audioBuffer.pushZeros(AUDIO_SAMPLES_PAD);
 
-    qScale = 200.f;
+    qScale = 250.f;
 }
 
 //--------------------------------------------------------------
@@ -127,6 +129,14 @@ void ofApp::update(){
     // apply non-rotational forces to bodies
     for (RigidBody& body : bodies) {
         body.v += gravity * dt;
+        if (attract) {
+            ofVec3f toAttractPos = attractPos - body.x;
+            float dist = toAttractPos.length();
+            if (dist >= 0.01f) {
+                toAttractPos /= dist;
+                body.v += (toAttractPos * MOUSE_CURSOR_MASS / dist) * dt;
+            }
+        }
         body.P = body.m * body.v;
     }
 
