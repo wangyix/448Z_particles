@@ -74,6 +74,9 @@ public:
     // Damping parameters
     const float alpha;
     const float beta;
+
+    bool topModes;
+    int nModesOnly;
 };
 
 #endif

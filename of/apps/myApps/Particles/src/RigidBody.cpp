@@ -70,19 +70,19 @@ void RigidBody::readModes(const string& fileName, float E, float nu, float rho, 
 
     phi->clear();
     omega->clear();
-    int num_modes, num_vertices;
-    file >> num_modes;
-    file >> num_vertices;
+    int numModes, numVertices;
+    file >> numModes;
+    file >> numVertices;
     float omegaMax = 0.f;
     float omegaMin = numeric_limits<float>::max();
-    vector<bool> modeIsUnderdamped(num_modes);
-    for (int i = 0; i < num_modes; i++) {
+    vector<bool> modeIsUnderdamped(numModes);
+    for (int i = 0; i < numModes; i++) {
         float eigenValue;
         file >> eigenValue;
         // only record the underdamped modes
         float wi = omegaScale * sqrtf(eigenValue);
         float xii = 0.5f * (alpha / wi + beta*wi);
-        modeIsUnderdamped[i] = (0.f < xii && xii < 1.f);
+        modeIsUnderdamped[i] = true;    // (0.f < xii && xii < 1.f);
         if (modeIsUnderdamped[i]) {
             omega->push_back(wi);
             if (wi > omegaMax) {
@@ -93,26 +93,26 @@ void RigidBody::readModes(const string& fileName, float E, float nu, float rho, 
             }
         }
     }
-    for (int i = 0; i < num_modes; i++) {
+    for (int i = 0; i < numModes; i++) {
         // only record the underdamped modes
         if (modeIsUnderdamped[i]) {
             phi->push_back(vector<ofVec3f>());
             vector<ofVec3f>& phi_i = phi->back();
-            for (int j = 0; j < num_vertices; j++) {
+            for (int j = 0; j < numVertices; j++) {
                 float x, y, z;
                 ofVec3f phi_i_j;
                 file >> phi_i_j.x >> phi_i_j.y >> phi_i_j.z;
                 phi_i.push_back(phiScale * phi_i_j);
             }
         } else {
-            for (int j = 0; j < num_vertices; j++) {
+            for (int j = 0; j < numVertices; j++) {
                 float unused;
                 file >> unused >> unused >> unused;
             }
         }
     }
     file.close();
-    cout << omega->size() << " underdamped modes; " << (num_modes-omega->size()) << " modes discarded" << endl;
+    cout << omega->size() << " underdamped modes; " << (numModes-omega->size()) << " modes discarded" << endl;
     cout << "Min freq: " << (omegaMin/(2.f*PI)) << " hz   Max freq: " << (omegaMax/(2.f*PI)) << " hz" << endl;
 }
 
@@ -289,6 +289,9 @@ RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, 
         qq[k] = vector<float>(omega.size(), 0.f);
     }
     qkAt = 0;
+
+    topModes = true;
+    nModesOnly = 94;
 }
 
 void RigidBody::rotate(float rad, const ofVec3f& axis) {
@@ -322,7 +325,7 @@ void RigidBody::step(float dt) {
     RInv = R.transposed();
     IInv = R * IBodyInv * RInv;
 
-    //w = IInv * L;   // ????
+    w = IInv * L;   // ????
 }
 
 void RigidBody::stepW(float dt) {
@@ -376,7 +379,10 @@ int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float 
         for (int i = 0; i < qk.size(); i++) {
             float wi = omega[i];
             float xii = 0.5f * (alpha/wi + beta*wi);
-            if (0.f < xii && xii < 1.f) {    // underdamped
+            //if (0.f < xii && xii < 1.f) {    // underdamped (overdamped frequencies were already removed)
+//if (i >= qk.size() - topNModesOnly) {
+if (0.f < xii && xii < 1.f &&
+    ((topModes && i >= qk.size()-nModesOnly) || (!topModes && i < nModesOnly))) {
                 float wdi = wi * sqrtf(1 - xii*xii);
 
                 float ei = exp(-xii*wi*h);
@@ -396,9 +402,12 @@ int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float 
                     qk[i] += (2.f*(ei*cosf(thetai + gammai) - ei*ei*cosf(2.f*thetai + gammai)) / (3.f*wi*wdi))
                         * (phi_i_dot_F);
                 }
-            } else {
-                qk[i] = 0.f;
-            }
+} else {
+    qk[i] = 0.f;
+}
+            //} else {
+            //    qk[i] = 0.f;
+            //}
             assert(!isnan(qk[i]));
             qkSum += qk[i];
         }

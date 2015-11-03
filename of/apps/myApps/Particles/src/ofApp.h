@@ -6,18 +6,16 @@
 #include "RingBuffer.h"
 #include "RigidBody.h"
 
-#define PIXELS_PER_METER 50.0
+#define PIXELS_PER_METER 800.0
 
 #define BOX_ZMIN (-400.0 / PIXELS_PER_METER)
 #define BOX_ZMAX 0.0
 
-#define GRAVITY_MAG 6.0
+#define GRAVITY_MAG 4.0
 
 #define AUDIO_SAMPLE_RATE 44100
 #define CHANNELS 2
 #define AUDIO_BUFFER_PAD_TIME 0.01   // in seconds
-
-#define WAV_SAMPLES 4876
 
 #define NUM_MATERIALS 4
 
@@ -65,4 +63,6 @@ private:
     ofVec3f listenPos;
 
     ofMatrix4x4 viewMatrix;
+
+    float qScale;
 };

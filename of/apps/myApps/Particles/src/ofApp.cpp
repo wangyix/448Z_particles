@@ -32,7 +32,9 @@ void ofApp::setup(){
     // initialize rigid bodies
     //bodies.emplace_back(sphereModesFileName, sphereObjFileName, materials[0], 1.f);
     //bodies.push_back(RigidBody(rodModesFileName, 7e10f, 0.3f, 1.f, 1000.f, 1e-11f, rodObjFileName, PLASTIC_MATERIAL, 20.f));
-    bodies.push_back(RigidBody(groundModesFileName, 2e11f, 0.4f, 1.f, 3000.f, 0*1e-16f, groundObjFileName, STEEL_MATERIAL, 0.1f));
+
+    bodies.push_back(RigidBody(groundModesFileName, 2e11f, 0.4f, 1.f, 15.f, 1e-12f, groundObjFileName, PLASTIC_MATERIAL, 0.005f));
+
     bodies[0].x = 0.3f * pMin + 0.7f * pMax;// +ofVec3f(0.f, 2.f, 0.f);
     //bodies[0].rotate(PI / 6.f, ofVec3f(0.f, 0.f, 1.f));
     //bodies[0].rotate(-PI / 6.f, ofVec3f(1.f, 0.f, 0.f));
@@ -58,6 +60,8 @@ void ofApp::setup(){
     //ofSetFrameRate(100);
 
     audioBuffer.pushZeros(AUDIO_SAMPLES_PAD);
+
+    qScale = 200.f;
 }
 
 //--------------------------------------------------------------
@@ -223,7 +227,6 @@ void ofApp::update(){
 
 
     // scale qSums to get audio samples
-    float qScale = 0.02f;
     float audioSamples[CHANNELS * AUDIO_SAMPLE_RATE];   // 1 second worth
     int audioSamplesComputed = 0;
 float maxSample = 0.f;
@@ -242,7 +245,7 @@ if (maxSample > 1.f || minSample < -1.f) {
 }
     
     // check if audioSamples has trailing zeros for sync adjustment
-    const float threshold = 0.000001f;
+    const float threshold = 1e-9f;
     int trailingZerosStartAt = audioSamplesComputed;
     while (trailingZerosStartAt > 0 && abs(audioSamples[trailingZerosStartAt - 1]) < threshold) {
         trailingZerosStartAt--;
@@ -252,8 +255,10 @@ if (maxSample > 1.f || minSample < -1.f) {
     // push audio samples
     int audioSamplesToPush = audioSamplesComputed;
     audioBufferLock.lock();
+    // only add/remove zeros if number of trailing zeros is sufficiently high;
+    // this prevents situations where you remove a small part of a sin wave where it crosses 0
     int trailingZeros = audioSamplesComputed - trailingZerosStartAt;
-    if (trailingZeros > 0) {
+    if (trailingZeros > secondsToSamples(0.5f * dt)) {
         int bufferSizeAfterPush = audioBuffer.size() + audioSamplesToPush;
         int zerosToAdd = AUDIO_SAMPLES_PAD - bufferSizeAfterPush;
         //printf("%d\n", zerosToAdd);
@@ -343,6 +348,66 @@ void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
 
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key){
+    RigidBody& body = bodies[0];
+    float& alpha = *const_cast<float*>(&body.alpha);
+    float& beta = *const_cast<float*>(&body.beta);
+    int& nModes = body.nModesOnly;
+    bool& topModes = body.topModes;
+
+    switch (key) {
+    case '1':
+        beta /= 1.05f;
+        printf("beta = %e\n", beta);
+        break;
+    case '2':
+        beta *= 1.05f;
+        printf("beta = %e\n", beta);
+        break;
+    case '3':
+        beta /= 10.f;
+        printf("beta = %e\n", beta);
+        break;
+    case '4':
+        beta *= 10.f;
+        printf("beta = %e\n", beta);
+        break;
+
+    case '5':
+        alpha /= 1.05f;
+        printf("alpha = %e\n", alpha);
+        break;
+    case '6':
+        alpha *= 1.05f;
+        printf("alpha = %e\n", alpha);
+        break;
+    case '8':
+        nModes -= 2;
+        break;
+    case '9':
+        nModes += 2;
+        break;
+    case '0':
+        topModes = !topModes;
+        break;
+    case '-':
+        qScale /= 1.1f;
+        printf("qScale = %f\n", qScale);
+        break;
+    case '=':
+        qScale *= 1.1f;
+        printf("qScale = %f\n", qScale);
+        break;
+    default:
+        break;
+    }
+
+    if (key == '8' || key == '9' || key == '0') {
+        if (topModes) {
+            printf("top %d modes only\n", nModes);
+        } else {
+            printf("bottom %d modes only\n", nModes);
+        }
+    }
 }
 
 //--------------------------------------------------------------
