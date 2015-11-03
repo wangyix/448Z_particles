@@ -48,7 +48,18 @@ static void readObj(const string& fileName, float scale, ofMesh* mesh) {
     mesh->setMode(OF_PRIMITIVE_TRIANGLES);
 }
 
-static void readModes(const string& fileName, vector<vector<ofVec3f>>* phi, vector<float>* omega) {
+void RigidBody::readModes(const string& fileName, float E, float nu, float rho, float sizeScale,
+                          vector<vector<ofVec3f>>* phi, vector<float>* omega) {
+
+    float modesG = E / (2.f * (1 + nu));
+    float materialG = material.E / (2.f * (1 + material.nu));
+    float stiffnessScale = sqrtf(materialG / modesG);
+
+    float densityScale = sqrtf(rho / material.rho);
+
+    float omegaScale = stiffnessScale * densityScale / sizeScale;
+    float phiScale = densityScale / sqrtf(sizeScale*sizeScale*sizeScale);
+
     cout << "Reading modes data from " << fileName << endl;
     ifstream file;
     file.open(fileName, ios::in);
@@ -56,26 +67,53 @@ static void readModes(const string& fileName, vector<vector<ofVec3f>>* phi, vect
         cout << "Failed to open " << fileName << endl;
         return;
     }
+
     phi->clear();
     omega->clear();
     int num_modes, num_vertices;
     file >> num_modes;
     file >> num_vertices;
+    float omegaMax = 0.f;
+    float omegaMin = numeric_limits<float>::max();
+    vector<bool> modeIsUnderdamped(num_modes);
     for (int i = 0; i < num_modes; i++) {
         float eigenValue;
         file >> eigenValue;
-        omega->push_back(sqrtf(eigenValue));
+        // only record the underdamped modes
+        float wi = omegaScale * sqrtf(eigenValue);
+        float xii = 0.5f * (alpha / wi + beta*wi);
+        modeIsUnderdamped[i] = (0.f < xii && xii < 1.f);
+        if (modeIsUnderdamped[i]) {
+            omega->push_back(wi);
+            if (wi > omegaMax) {
+                omegaMax = wi;
+            }
+            if (wi < omegaMin) {
+                omegaMin = wi;
+            }
+        }
     }
     for (int i = 0; i < num_modes; i++) {
-        phi->push_back(vector<ofVec3f>());
-        vector<ofVec3f>& phi_i = phi->back();
-        for (int j = 0; j < num_vertices; j++) {
-            float x, y, z;
-            file >> x >> y >> z;
-            phi_i.emplace_back(x, y, z);
+        // only record the underdamped modes
+        if (modeIsUnderdamped[i]) {
+            phi->push_back(vector<ofVec3f>());
+            vector<ofVec3f>& phi_i = phi->back();
+            for (int j = 0; j < num_vertices; j++) {
+                float x, y, z;
+                ofVec3f phi_i_j;
+                file >> phi_i_j.x >> phi_i_j.y >> phi_i_j.z;
+                phi_i.push_back(phiScale * phi_i_j);
+            }
+        } else {
+            for (int j = 0; j < num_vertices; j++) {
+                float unused;
+                file >> unused >> unused >> unused;
+            }
         }
     }
     file.close();
+    cout << omega->size() << " underdamped modes; " << (num_modes-omega->size()) << " modes discarded" << endl;
+    cout << "Min freq: " << (omegaMin/(2.f*PI)) << " hz   Max freq: " << (omegaMax/(2.f*PI)) << " hz" << endl;
 }
 
 static float signedVolume(const ofMeshFace& tri) {
@@ -175,7 +213,8 @@ static void signedMoment2(const ofMeshFace& tri,
     *Mxz = 0.5f * (delta[2] / 60.f) * (V[0].x*g[0][Z] + V[1].x*g[1][Z] + V[2].x*g[2][Z]);
 }
 
-RigidBody::RigidBody(const string& modesFileName, const string& objFileName, const Material& material, float scale)
+RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, float alpha, float beta,
+                     const string& objFileName, const Material& material, float sizeScale)
     :
     material(material),
     x(0.f, 0.f, 0.f),
@@ -185,9 +224,11 @@ RigidBody::RigidBody(const string& modesFileName, const string& objFileName, con
     R(IDENTITY3X3),
     RInv(IDENTITY3X3),
     v(0.f, 0.f, 0.f),
-    w(0.f, 0.f, 0.f) {
-
-    readObj(objFileName, scale, &mesh);
+    w(0.f, 0.f, 0.f),
+    alpha(alpha),
+    beta(beta) 
+{
+    readObj(objFileName, sizeScale, &mesh);
 
     // compute zeroth and first order moments
     float M = 0.f;
@@ -200,7 +241,7 @@ RigidBody::RigidBody(const string& modesFileName, const string& objFileName, con
         Mz += signedMoment(tri, 2, 1);
     }
 
-    m = material.density * abs(M);          // mass
+    m = material.rho * abs(M);          // mass
     ofVec3f r = ofVec3f(Mx, My, Mz) / M;    // center of mass
 
     // move mesh so its center of mass is at origin
@@ -219,9 +260,9 @@ RigidBody::RigidBody(const string& modesFileName, const string& objFileName, con
         Mxy += mxy, Myz += myz, Mxz += mxz;
     }
 
-    float Ixx = material.density * (Myy + Mzz);
-    float Iyy = material.density * (Mzz + Mxx);
-    float Izz = material.density * (Mxx + Myy);
+    float Ixx = material.rho * (Myy + Mzz);
+    float Iyy = material.rho * (Mzz + Mxx);
+    float Izz = material.rho * (Mxx + Myy);
     //float Ixy = material.density * Mxy;
     //float Iyz = material.density * Myz;
     //float Ixz = material.density * Mxz;
@@ -239,7 +280,7 @@ RigidBody::RigidBody(const string& modesFileName, const string& objFileName, con
     IInv = IBodyInv;
 
 
-    readModes(modesFileName, &phi, &omega);
+    readModes(modesFileName, E, nu, rho, sizeScale, &phi, &omega);
     assert(phi.size() == omega.size());
     assert(phi[0].size() == mesh.getNumVertices());
     
@@ -304,15 +345,17 @@ void RigidBody::stepW(float dt) {
     w = R * wBody;
 }
 
-int RigidBody::audioStep(float dt, const vector<VertexImpulse>& impulses, float dt_q, float* qSum) {
+int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float dt_q, float* qSum) {
 
     float h = dt_q;
 
+    /*
     // damping params
     const float alpha = 0.f;
     //const float beta = 0.0000001f;        // sphere
     //const float beta = 0.00001f;          // ground
     const float beta = 0.00000000001f;          // rod
+    */
 
     // all impulses will be spread out over the first time-step of q as constant forces.
     // convert the impulses to forces in bodyspace.

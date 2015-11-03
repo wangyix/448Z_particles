@@ -7,10 +7,10 @@ const ofMatrix3x3 IDENTITY3X3 = ofMatrix3x3(1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0
 
 struct Material {
     Material(float density, float yMod, float pRatio, const ofColor& color)
-        : density(density), yMod(yMod), pRatio(pRatio), color(color) {}
-    float density;
-    float yMod;
-    float pRatio;
+        : rho(density), E(yMod), nu(pRatio), color(color) {}
+    float rho;
+    float E;
+    float nu;
     ofColor color;
 };
 
@@ -23,17 +23,22 @@ struct VertexImpulse {
 
 struct RigidBody {
 public:
-    RigidBody(const string& modesFileName, const string& objFileName, const Material& material, float scale = 1.f);
+    RigidBody(const string& modesFileName, float E, float nu, float rho, float alpha, float beta, 
+              const string& objFileName, const Material& material, float sizeScale);
 
     void rotate(float rad, const ofVec3f& axis);
     
     void step(float dt);
     void stepW(float dt);
     
-    int audioStep(float dt, const vector<VertexImpulse>& impulses, float dt_q, float* qSum);
+    int stepAudio(float dt, const vector<VertexImpulse>& impulses, float dt_q, float* qSum);
 
     ofVec3f getXi(int i) const;
     ofVec3f getVi(int i) const;
+
+private:
+    void readModes(const string& fileName, float E, float nu, float rho, float sizeScale,
+        vector<vector<ofVec3f>>* phi, vector<float>* omega);
 
 public:
     ofMesh mesh;
@@ -65,6 +70,10 @@ public:
     // Modal amplitudes
     vector<float> qq[3];        // 3 most recent q vectors: q(k-2),q(k-1),q(k)
     int qkAt;                   // index where q(k) is stored
+
+    // Damping parameters
+    const float alpha;
+    const float beta;
 };
 
 #endif
