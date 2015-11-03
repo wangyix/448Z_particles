@@ -30,10 +30,10 @@ void ofApp::setup(){
     windowResized(ofGetWidth(), ofGetHeight());
 
     // initialize rigid bodies
-    //bodies.emplace_back(sphereModesFileName, sphereObjFileName, materials[0], 1.f);
-    //bodies.push_back(RigidBody(rodModesFileName, 7e10f, 0.3f, 1.f, 1000.f, 1e-11f, rodObjFileName, PLASTIC_MATERIAL, 20.f));
+    //bodies.push_back(RigidBody(groundModesFileName, 2e11f, 0.4f, 1.f, 50.f, 1e-11f, groundObjFileName, PLASTIC_MATERIAL, 0.005f));
+    bodies.push_back(RigidBody(rodModesFileName, 7e10f, 0.3f, 1.f, 50.f, 1e-11f, rodObjFileName, PLASTIC_MATERIAL, 1.f));
+    //bodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 50.f, 1e-6f, sphereObjFileName, PLASTIC_MATERIAL, 0.05f));
 
-    bodies.push_back(RigidBody(groundModesFileName, 2e11f, 0.4f, 1.f, 15.f, 1e-12f, groundObjFileName, PLASTIC_MATERIAL, 0.005f));
 
     bodies[0].x = 0.3f * pMin + 0.7f * pMax;// +ofVec3f(0.f, 2.f, 0.f);
     //bodies[0].rotate(PI / 6.f, ofVec3f(0.f, 0.f, 1.f));
