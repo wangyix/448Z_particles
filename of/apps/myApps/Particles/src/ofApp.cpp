@@ -36,12 +36,12 @@ void ofApp::setup(){
     // initialize rigid bodies
     //bodies.push_back(RigidBody(groundModesFileName, 2e11f, 0.4f, 1.f, 50.f, 1e-6f, groundObjFileName, PLASTIC_MATERIAL, 0.005f));
     //bodies.push_back(RigidBody(rodModesFileName, 7e10f, 0.3f, 1.f, 50.f, 1e-11f, rodObjFileName, PLASTIC_MATERIAL, 1.f));
-    bodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.05f, true));
-    bodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.075f, true));
+    sphereBodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.05f, true));
+    sphereBodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.075f, true));
 
 
-    bodies[0].x = 0.25f * pMin + 0.75f * pMax;// +ofVec3f(0.f, 2.f, 0.f);
-    bodies[1].x = 0.5f * pMin + 0.5f * pMax;
+    sphereBodies[0].x = 0.25f * pMin + 0.75f * pMax;// +ofVec3f(0.f, 2.f, 0.f);
+    sphereBodies[1].x = sphereBodies[0].x + ofVec3f(-0.2f, 0.f, 0.f);//0.5f * pMin + 0.5f * pMax;
     //bodies[2].x = 0.75f * pMin + 0.25f * pMax;
     //bodies[0].rotate(PI / 6.f, ofVec3f(0.f, 0.f, 1.f));
     //bodies[0].rotate(-PI / 6.f, ofVec3f(1.f, 0.f, 0.f));
@@ -52,6 +52,13 @@ void ofApp::setup(){
     //bodies[1].L = ofVec3f(0.f, 0.f, 1000.f);
     //bodies[1].w = bodies[0].IInv * bodies[0].L;
 
+
+    for (RigidBody& body : bodies) {
+        allBodies.push_back(&body);
+    }
+    for (RigidBody& sphereBody : sphereBodies) {
+        allBodies.push_back(&sphereBody);
+    }
 
     // initialize light
     ofSetSmoothLighting(true);
@@ -68,7 +75,7 @@ void ofApp::setup(){
 
     audioBuffer.pushZeros(AUDIO_SAMPLES_PAD);
 
-    qScale = 250.f;
+    qScale = 200.f;
     accelAudioScale = 0.08f;
 }
 
@@ -76,10 +83,10 @@ void ofApp::setup(){
 void ofApp::exit() {
 }
 
-enum WALL_ID{ NONE=0, XMIN=1, XMAX=2, YMIN=3, YMAX=4, ZMIN=5, ZMAX=6 };
+enum WALL_ID{ NONE=-1, XMIN=-2, XMAX=-3, YMIN=-4, YMAX=-5, ZMIN=-6, ZMAX=-7 };
 
-int ofApp::particleCollideWall(const ofVec3f& p, const ofVec3f& v, float tMin, float tMax, float* tc) {
-    assert(tMax > 0.f);
+int ofApp::particleCollideWall(const ofVec3f& p, const ofVec3f& v, float tMin, float* t) {
+    /*assert(tMax > 0.f);
     float tt = tMax;
     int id = NONE;
     if (v.x > 0.f) {
@@ -122,10 +129,88 @@ int ofApp::particleCollideWall(const ofVec3f& p, const ofVec3f& v, float tMin, f
         }
     }
     if (tt < tMax) {
-        *tc = tt;
+        *t = tt;
+    }
+    return id;*/
+    return sphereCollideWall(p, v, 0.f, tMin, t);
+}
+
+int ofApp::sphereCollideWall(const ofVec3f& p, const ofVec3f& v, float r, float tMin, float* t) {
+    int id = NONE;
+    if (v.x > 0.f) {
+        float tt = (pMax.x - r - p.x) / v.x;
+        if (tMin <= tt && tt < *t) {
+            *t = tt;
+            id = XMAX;
+        }
+    } else {
+        float tt = (pMin.x + r - p.x) / v.x;
+        if (tMin <= tt && tt < *t) {
+            *t = tt;
+            id = XMIN;
+        }
+    }
+    if (v.y > 0.f) {
+        float tt = (pMax.y - r - p.y) / v.y;
+        if (tMin <= tt && tt < *t) {
+            *t = tt;
+            id = YMAX;
+        }
+    } else {
+        float tt = (pMin.y + r - p.y) / v.y;
+        if (tMin <= tt && tt < *t) {
+            *t = tt;
+            id = YMIN;
+        }
+    }
+    if (v.z > 0.f) {
+        float tt = (pMax.z - r - p.z) / v.z;
+        if (tMin <= tt && tt < *t) {
+            *t = tt;
+            id = ZMAX;
+        }
+    } else {
+        float tt = (pMin.z + r - p.z) / v.z;
+        if (tMin <= tt && tt < *t) {
+            *t = tt;
+            id = ZMIN;
+        }
     }
     return id;
 }
+
+// will only return smaller root or no collision
+static bool spheresCollide(const ofVec3f& p1, const ofVec3f& v1, float r1,
+                           const ofVec3f& p2, const ofVec3f& v2, float r2,
+                           float tMin, float* t) {
+    ofVec3f cDiff = p1 - p2;
+    ofVec3f vDiff = v1 - v2;
+    float rSum = r1 + r2;
+    float a = vDiff.lengthSquared();
+    if (a == 0.f) {
+        return false;
+    }
+    float b_over_2 = cDiff.dot(vDiff);
+    float c = cDiff.lengthSquared() - rSum*rSum;
+    float D_over_4 = b_over_2*b_over_2 - a*c;
+    if (D_over_4 < 0.f) {
+        return false;
+    }
+    float tt;
+    if (b_over_2 > 0.f) {
+        float z = -b_over_2 - sqrtf(D_over_4);
+        tt = z / a;
+    } else {
+        float z = -b_over_2 + sqrtf(D_over_4);
+        tt = c / z;
+    }
+    if (tMin <= tt && tt < *t) {
+        *t = tt;
+        return true;
+    }
+    return false;
+}
+
 
 static float computeTau(float r1Inv, float m1Inv, float v1, float E1,
     float r2Inv, float m2Inv, float v2, float E2, float V) {
@@ -152,13 +237,42 @@ static float computeSConst(const ofVec3f& p, float r, float m,
     return combinedConst;
 }
 
+static ofVec3f wallIdToNormal(int wallId) {
+    ofVec3f n;
+    switch (wallId) {
+    case XMIN:
+        n = ofVec3f(1.f, 0.f, 0.f);
+        break;
+    case XMAX:
+        n = ofVec3f(-1.f, 0.f, 0.f);
+        break;
+    case YMIN:
+        n = ofVec3f(0.f, 1.f, 0.f);
+        break;
+    case YMAX:
+        n = ofVec3f(0.f, -1.f, 0.f);
+        break;
+    case ZMIN:
+        n = ofVec3f(0.f, 0.f, 1.f);
+        break;
+    case ZMAX:
+        n = ofVec3f(0.f, 0.f, -1.f);
+        break;
+    default:
+        assert(false);
+        break;
+    }
+    return n;
+}
+
 //--------------------------------------------------------------
 void ofApp::update() {
     float dt = min(0.01, ofGetLastFrameTime());
     if (dt <= 0.f) return;
 
     // apply non-rotational forces to bodies
-    for (RigidBody& body : bodies) {
+    for (RigidBody* bodyPtr : allBodies) {
+        RigidBody& body = *bodyPtr;
         body.v += gravity * dt;
         if (attract) {
             ofVec3f toAttractPos = attractPos - body.x;
@@ -171,21 +285,18 @@ void ofApp::update() {
         body.P = body.m * body.v;
     }
 
+    const float e = 0.5f;   // coefficient of restitution
+
     float qSums[AUDIO_SAMPLE_RATE];    // 1 second worth
     memset(qSums, 0, AUDIO_SAMPLE_RATE*sizeof(float));
     int qsComputed = 0;
-
-    float accelAudioSamples[SECONDS_TO_SAMPLES(0.5)];
-    memset(accelAudioSamples, 0, SECONDS_TO_SAMPLES(0.5)*sizeof(float));
-    int accelAudioStart = SECONDS_TO_SAMPLES(0.5);
-    int accelAudioEnd = 0;
 
     // compute collisions of vertices against walls
     for (RigidBody& body : bodies) {
 
         vector<VertexImpulse> impulses;
 
-        int i_c = 0;                            // index of the vertex that collides
+        int i_c = -1;                           // index of the vertex that collides
         ofVec3f ri_c(0.f, 0.f, 0.f);            // world ri of the vertex that collides
         ofVec3f xi_c(0.f, 0.f, 0.f);            // world position of vertex that collides
         ofVec3f vi_c(0.f, 0.f, 0.f);            // world velocity of vertex that collides
@@ -198,9 +309,8 @@ void ofApp::update() {
                 ofVec3f xi = body.x + ri;
                 ofVec3f vi = body.v + (body.w.crossed(ri));
                 float t;
-                int id = particleCollideWall(xi, vi, -100000000.f, dt, &t);
-                if (id != NONE && t < dt_c) {
-                    dt_c = t;
+                int id = particleCollideWall(xi, vi, -100000000.f, &dt_c);
+                if (id != NONE) {
                     wallId = id;
                     i_c = i;
                     ri_c = ri;
@@ -208,37 +318,14 @@ void ofApp::update() {
                     vi_c = vi;
                 }
             }
-            
+
             // compute impulse imparted by collision at this vertex, if any,
             // and accumulate effect of impulse into P, L
             if (wallId != NONE) {
-                ofVec3f n;
-                switch (wallId) {
-                case XMIN:
-                    n = ofVec3f(1.f, 0.f, 0.f);
-                    break;
-                case XMAX:
-                    n = ofVec3f(-1.f, 0.f, 0.f);
-                    break;
-                case YMIN:
-                    n = ofVec3f(0.f, 1.f, 0.f);
-                    break;
-                case YMAX:
-                    n = ofVec3f(0.f, -1.f, 0.f);
-                    break;
-                case ZMIN:
-                    n = ofVec3f(0.f, 0.f, 1.f);
-                    break;
-                case ZMAX:
-                    n = ofVec3f(0.f, 0.f, -1.f);
-                    break;
-                default:
-                    break;
-                }
+                ofVec3f n = wallIdToNormal(wallId);
 
-                const float e = 0.5f;   // coefficient of restitution
                 float j = -(1.f + e)*(vi_c.dot(n)) /
-                    (  1.f / body.m + ( (body.IInv * (ri_c.crossed(n))).crossed(ri_c) ).dot(n)  );
+                    (1.f / body.m + ((body.IInv * (ri_c.crossed(n))).crossed(ri_c)).dot(n));
 
                 ofVec3f impulse = j*n;
 
@@ -249,7 +336,7 @@ void ofApp::update() {
                 body.v = (body.P / body.m);
                 body.w = (body.IInv * body.L);
 
-                impulses.emplace_back(i_c, impulse, xi_c, vi_c.dot(n));
+                impulses.emplace_back(i_c, impulse);
 
             } else {
                 // no collision
@@ -260,38 +347,144 @@ void ofApp::update() {
         body.step(dt);
         body.stepW(dt);
 
-
         // compute modal noise amplitudes
         int qsComputedThisBody = body.stepAudio(dt, impulses, 1.f / AUDIO_SAMPLE_RATE, qSums);
         if (qsComputedThisBody > qsComputed) {
             qsComputed = qsComputedThisBody;
         }
+    }
 
-        // compute acceleration noise for spheres
-        if (body.isSphere) {
-            for (const VertexImpulse& vim : impulses) {
-                // compute tau, SConst
-                float tau = computeTau(1.f / body.r, 1.f / body.m, body.material.nu, body.material.E,
-                    0.f, 0.f, wallMaterial.nu, wallMaterial.E, vim.vn);
-                float SConst = computeSConst(body.x, body.r, body.m, listenPos, tau, vim.impulse);
+    // ============================================================================================
 
-                // retarded time
-                int i = SECONDS_TO_SAMPLES((vim.x - listenPos).length() / 330.f);
-                if (i < accelAudioStart) {
-                    accelAudioStart = i;
+    float accelAudioSamples[SECONDS_TO_SAMPLES(0.5)];
+    memset(accelAudioSamples, 0, SECONDS_TO_SAMPLES(0.5)*sizeof(float));
+    int accelAudioStart = SECONDS_TO_SAMPLES(0.5);
+    int accelAudioEnd = 0;
+
+    const int numSpheres = sphereBodies.size();
+    vector<vector<VertexImpulse>> sphereImpulses(numSpheres);   // keeps track of impulse(s) applied to each sphereBody
+
+    float dtProcessed = 0.f;
+    while (true) {
+        // find next collision
+        int i_c = -1;       // index of sphere that collides
+        int j_c = -1;       // index of other sphere that collides, or wall id that collides
+        float dt_c = dt - dtProcessed;
+        for (int i = 0; i < numSpheres; i++) {
+            RigidBody& sphere1 = sphereBodies[i];
+            // collide with other spheres
+            for (int j = i + 1; j < numSpheres; j++) {
+                RigidBody& sphere2 = sphereBodies[j];
+                if (spheresCollide(sphere1.x, sphere1.v, sphere1.r, sphere2.x, sphere2.v, sphere2.r, 0.f, &dt_c)) {
+                    i_c = i;
+                    j_c = j;
                 }
-                for (float t = 0.f; t < tau; t += 1.f / AUDIO_SAMPLE_RATE) {
-                    float sample = (accelAudioScale * SConst) * (t - 0.5f * tau) * sin(PI*t / tau);
-                    for (int j = 0; j < CHANNELS; j++) {
-                        accelAudioSamples[i++] += sample;
-                    }
-                }
-                if (i > accelAudioEnd) {
-                    accelAudioEnd = i;
-                }
+            }
+            // collide with walls
+            int wallId = sphereCollideWall(sphere1.x, sphere1.v, sphere1.r, 0.f, &dt_c);
+            if (wallId != NONE) {
+                i_c = i;
+                j_c = wallId;
             }
         }
 
+        // step all spheres forward until collision
+        if (dt_c > 0.f) {
+            for (int i = 0; i < numSpheres; i++) {
+                RigidBody& body = sphereBodies[i];
+                body.step(dt_c);
+                body.stepW(dt_c);
+            }
+        }
+
+        if (i_c == -1) {
+            // all collisions (if any) have been resolved
+            break;
+        }
+
+        RigidBody& sphereBody = sphereBodies[i_c];
+
+        float tau;
+        float SConst;
+        ofVec3f contactPos;
+        if (j_c < NONE) {   // sphere-wall collision
+            int wallId = j_c;
+            ofVec3f n = wallIdToNormal(wallId);
+
+            // compute impulse
+            float vn = sphereBody.v.dot(n);
+            ofVec3f impulse = (1.f + e) * abs(vn) * sphereBody.m * n;
+
+            contactPos = sphereBody.x - sphereBody.r * n;
+
+            // apply impulse to sphere
+            sphereBody.P += impulse;
+            sphereBody.v = (sphereBody.P / sphereBody.m);
+            
+            // compute tau, SConst for sphere-wall collision
+            tau = computeTau(1.f / sphereBody.r, 1.f / sphereBody.m, sphereBody.material.nu, sphereBody.material.E,
+                0.f, 0.f, wallMaterial.nu, wallMaterial.E, vn);
+            SConst = computeSConst(sphereBody.x, sphereBody.r, sphereBody.m, listenPos, tau, impulse);
+
+            // record impulse for modal sound computation later
+            sphereImpulses[i_c].emplace_back(sphereBody.closestVertexIndex(contactPos), impulse);
+        
+        } else {    // sphere-sphere collision
+            RigidBody& sphereBody2 = sphereBodies[j_c];
+
+            ofVec3f n = (sphereBody.x - sphereBody2.x).normalized();
+            float vn = (sphereBody2.v - sphereBody.v).dot(n);
+            float J = (1.f + e)*vn / (1.f / sphereBody.m + 1.f / sphereBody2.m);
+            ofVec3f impulse = J * n;
+
+            contactPos = sphereBody.x - sphereBody.r * n;
+
+            // apply impulse to spheres
+            sphereBody.P += impulse;
+            sphereBody.v = (sphereBody.P / sphereBody.m);
+            sphereBody2.P -= impulse;
+            sphereBody2.v = (sphereBody2.P / sphereBody2.m);
+
+            // compute tau, SConst
+            tau = computeTau(1.f / sphereBody.r, 1.f / sphereBody.m, sphereBody.material.nu, sphereBody.material.E,
+                1.f / sphereBody2.r, 1.f / sphereBody2.m, sphereBody2.material.nu, sphereBody2.material.E, abs(vn));
+            float SConst1 = computeSConst(sphereBody.x, sphereBody.r, sphereBody.m, listenPos, tau, impulse);
+            float SConst2 = computeSConst(sphereBody2.x, sphereBody2.r, sphereBody2.m, listenPos, tau, -impulse);
+            SConst = SConst1 + SConst2;
+SConst *= 20.f;
+
+            // record impulse for modal sound computation later
+            sphereImpulses[i_c].emplace_back(sphereBody.closestVertexIndex(contactPos), impulse);
+            sphereImpulses[j_c].emplace_back(sphereBody2.closestVertexIndex(contactPos), -impulse);
+        }
+
+        // compute acceleration noise samples for this collision
+        // TODO: check for possible overrun of accelAudioSamples array
+        int i = SECONDS_TO_SAMPLES((contactPos - listenPos).length() / 330.f);  // retarded time
+        if (i < accelAudioStart) {
+            accelAudioStart = i;
+        }
+        for (float t = 0.f; t < tau; t += 1.f / AUDIO_SAMPLE_RATE) {
+            float sample = (accelAudioScale * SConst) * (t - 0.5f * tau) * sin(PI*t / tau);
+            for (int j = 0; j < CHANNELS; j++) {
+                accelAudioSamples[i++] += sample;
+            }
+        }
+        if (i > accelAudioEnd) {
+            accelAudioEnd = i;
+        }
+
+        dtProcessed += dt_c;
+    }
+
+    for (int i = 0; i < numSpheres; i++) {
+        RigidBody& body = sphereBodies[i];
+
+        // compute modal amplitues from impulses applied
+        int qsComputedThisBody = body.stepAudio(dt, sphereImpulses[i], 1.f / AUDIO_SAMPLE_RATE, qSums);
+        if (qsComputedThisBody > qsComputed) {
+            qsComputed = qsComputedThisBody;
+        }
     }
 
 
@@ -404,17 +597,18 @@ void ofApp::draw(){
     topWall.draw();
     bottomWall.draw();
     
-    for (int i = 0; i < bodies.size(); i++) {
-        ofSetColor(bodies[i].material.color);
+    for (RigidBody* bodyPtr : allBodies) {
+        RigidBody& body = *bodyPtr;
+        ofSetColor(body.material.color);
         ofPushMatrix();
-        const ofMatrix3x3& R = bodies[i].R;
-        const ofVec3f& T = bodies[i].x;
+        const ofMatrix3x3& R = body.R;
+        const ofVec3f& T = body.x;
         ofMatrix4x4 objToWorld(R.a, R.d, R.g, 0.f,
                                R.b, R.e, R.h, 0.f,
                                R.c, R.f, R.i, 0.f,
                                T.x, T.y, T.z, 1.f / PIXELS_PER_METER);
         ofLoadMatrix(objToWorld * viewMatrix);
-        bodies[i].mesh.draw();
+        body.mesh.draw();
         ofPopMatrix();
     }
 
@@ -455,7 +649,7 @@ void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
 
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key){
-    RigidBody& body = bodies[0];
+    RigidBody& body = *allBodies[0];
     float& alpha = *const_cast<float*>(&body.alpha);
     float& beta = *const_cast<float*>(&body.beta);
     int& nModes = body.nModesOnly;

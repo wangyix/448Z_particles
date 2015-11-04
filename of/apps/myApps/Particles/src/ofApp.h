@@ -43,7 +43,8 @@ public:
     void audioOut(float* output, int bufferSize, int nChannels) override;
 
 private:
-    int particleCollideWall(const ofVec3f& p, const ofVec3f& v, float tMin, float tMax, float* tc);
+    int particleCollideWall(const ofVec3f& p, const ofVec3f& v, float tMin, float* t);
+    int sphereCollideWall(const ofVec3f& p, const ofVec3f& v, float r, float tMin, float* t);
 
 private:
     ofLight pointLight;
@@ -52,6 +53,8 @@ private:
     ofVec3f pMin, pMax;                 // scene bounds
 
     vector<RigidBody> bodies;
+    vector<RigidBody> sphereBodies;
+    vector<RigidBody*> allBodies;
 
     ofVec3f gravity;                    // acceleration due to gravity
     

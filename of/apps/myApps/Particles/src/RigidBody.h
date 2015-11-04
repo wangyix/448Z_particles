@@ -15,12 +15,10 @@ struct Material {
 };
 
 struct VertexImpulse {
-    VertexImpulse(int vertex, const ofVec3f& impulse, const ofVec3f& x, float vn)
-        : vertex(vertex), impulse(impulse), x(x), vn(vn) {}
+    VertexImpulse(int vertex, const ofVec3f& impulse)
+        : vertex(vertex), impulse(impulse) {}
     int vertex;
     ofVec3f impulse;
-    ofVec3f x;      // position where impulse was applied
-    float vn;       // normal velocity
 };
 
 struct RigidBody {
@@ -35,6 +33,8 @@ public:
     void stepW(float dt);
     
     int stepAudio(float dt, const vector<VertexImpulse>& impulses, float dt_q, float* qSum);
+
+    int closestVertexIndex(const ofVec3f& worldPos) const;
 
     ofVec3f getXi(int i) const;
     ofVec3f getVi(int i) const;

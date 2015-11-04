@@ -434,6 +434,19 @@ if (0.f < xii && xii < 1.f &&
 
     return qsToCompute;
 }
+int RigidBody::closestVertexIndex(const ofVec3f& worldPos) const {
+    ofVec3f r = RInv * (worldPos - x);
+    float minDistSq = numeric_limits<float>::max();
+    int minIndex = -1;
+    for (int i = 0; i < mesh.getNumVertices(); i++) {
+        float distSq = (mesh.getVertex(i) - r).lengthSquared();
+        if (distSq < minDistSq) {
+            minDistSq = distSq;
+            minIndex = i;
+        }
+    }
+    return minIndex;
+}
 
 ofVec3f RigidBody::getXi(int i) const {
     return x + R * mesh.getVertex(i);
