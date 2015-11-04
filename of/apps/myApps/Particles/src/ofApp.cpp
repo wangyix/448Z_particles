@@ -37,10 +37,11 @@ void ofApp::setup(){
     //bodies.push_back(RigidBody(groundModesFileName, 2e11f, 0.4f, 1.f, 50.f, 1e-6f, groundObjFileName, PLASTIC_MATERIAL, 0.005f));
     //bodies.push_back(RigidBody(rodModesFileName, 7e10f, 0.3f, 1.f, 50.f, 1e-11f, rodObjFileName, PLASTIC_MATERIAL, 1.f));
     bodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.05f, true));
+    bodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.075f, true));
 
 
     bodies[0].x = 0.25f * pMin + 0.75f * pMax;// +ofVec3f(0.f, 2.f, 0.f);
-    //bodies[1].x = 0.5f * pMin + 0.5f * pMax;
+    bodies[1].x = 0.5f * pMin + 0.5f * pMax;
     //bodies[2].x = 0.75f * pMin + 0.25f * pMax;
     //bodies[0].rotate(PI / 6.f, ofVec3f(0.f, 0.f, 1.f));
     //bodies[0].rotate(-PI / 6.f, ofVec3f(1.f, 0.f, 0.f));
@@ -152,7 +153,7 @@ static float computeSConst(const ofVec3f& p, float r, float m,
 }
 
 //--------------------------------------------------------------
-void ofApp::update(){
+void ofApp::update() {
     float dt = min(0.01, ofGetLastFrameTime());
     if (dt <= 0.f) return;
 
@@ -215,33 +216,27 @@ void ofApp::update(){
                 switch (wallId) {
                 case XMIN:
                     n = ofVec3f(1.f, 0.f, 0.f);
-                    //printf("x0 ");
                     break;
                 case XMAX:
                     n = ofVec3f(-1.f, 0.f, 0.f);
-                    //printf("x1 ");
                     break;
                 case YMIN:
                     n = ofVec3f(0.f, 1.f, 0.f);
-                    //printf("y0 ");
                     break;
                 case YMAX:
                     n = ofVec3f(0.f, -1.f, 0.f);
-                    //printf("y1 ");
                     break;
                 case ZMIN:
                     n = ofVec3f(0.f, 0.f, 1.f);
-                    //printf("z0 ");
                     break;
                 case ZMAX:
                     n = ofVec3f(0.f, 0.f, -1.f);
-                    //printf("z1 ");
                     break;
                 default:
                     break;
                 }
 
-                const float e = 0.5f;
+                const float e = 0.5f;   // coefficient of restitution
                 float j = -(1.f + e)*(vi_c.dot(n)) /
                     (  1.f / body.m + ( (body.IInv * (ri_c.crossed(n))).crossed(ri_c) ).dot(n)  );
 
