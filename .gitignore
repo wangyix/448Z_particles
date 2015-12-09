@@ -220,3 +220,6 @@ _Pvt_Extensions
 # Only include project files, not openFrameworks files
 /of/*
 !/of/apps
+
+*.txt
+*.md
