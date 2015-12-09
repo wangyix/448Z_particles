@@ -1,6 +1,7 @@
 #ifndef RIGIDBODY_H
 #define RIGIDBODY_H
 
+#include <Eigen/Dense>
 #include "ofMain.h"
 
 const ofMatrix3x3 IDENTITY3X3 = ofMatrix3x3(1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 1.f);
@@ -82,7 +83,7 @@ public:
     const bool isSphere;
     float r;
 
-    bool topModes;
+    bool topModes;  // FOR TUNING DAMPING PARAMS
     int nModesOnly;
 };
 
