@@ -2,6 +2,8 @@
 #define RIGIDBODY_H
 
 #include <Eigen/Dense>
+#include "redsvd/redsvd.hpp"
+
 #include "ofMain.h"
 
 const ofMatrix3x3 IDENTITY3X3 = ofMatrix3x3(1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 1.f);
@@ -41,6 +43,8 @@ public:
     ofVec3f getVi(int i) const;
 
 private:
+    void computeMIBodyIBodyInv();
+
     void readModes(const string& fileName, float E, float nu, float rho, float sizeScale,
         vector<vector<ofVec3f>>* phi, vector<float>* omega);
 
@@ -85,6 +89,31 @@ public:
 
     bool topModes;  // FOR TUNING DAMPING PARAMS
     int nModesOnly;
+
+    /*
+    // relevant example of how to use RedSVD:
+
+    int rowN = 3;
+    int colN = 5;
+    MatrixXf A(rowN, colN);
+    A << 1,  2,  3,  4,  5,
+         6,  7,  8,  9, 10, 
+        11, 12, 13, 14, 15;
+  
+    int r = 2;
+    REDSVD::RedSVD redsvd;
+    redsvd.run(A, r);
+    MatrixXf U = redsvd.matrixU();
+    VectorXf S = redsvd.singularValues();
+    MatrixXf V = redsvd.matrixV();
+
+    ASSERT_EQ(rowN, U.rows());
+    ASSERT_EQ(r,    U.cols());
+    ASSERT_EQ(colN, V.rows());
+    ASSERT_EQ(r,    V.cols());
+    ASSERT_EQ(r,    S.rows());
+    ASSERT_EQ(1,    S.cols());
+  */
 };
 
 #endif

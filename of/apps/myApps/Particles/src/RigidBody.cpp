@@ -31,9 +31,9 @@ static void readObj(const string& fileName, float scale, ofMesh* mesh) {
             for (int i = 0; i < 3; i++) {
                 v[i] = mesh->getVertex(--indices[i]);
             }
-            ofVec3f n = (v[1] - v[0]).crossed(v[2] - v[0]).normalized();
+            ofVec3f n_area = (v[1] - v[0]).crossed(v[2] - v[0]);
             for (int i = 0; i < 3; i++) {
-                normals[indices[i]] += n;
+                normals[indices[i]] += n_area;
             }
             mesh->addTriangle(indices[0], indices[1], indices[2]);
         } else{
@@ -116,7 +116,7 @@ void RigidBody::readModes(const string& fileName, float E, float nu, float rho, 
     cout << "Min freq: " << (omegaMin/(2.f*PI)) << " hz   Max freq: " << (omegaMax/(2.f*PI)) << " hz" << endl;
 }
 
-static float signedVolume(const ofMeshFace& tri) {
+/*static float signedVolume(const ofMeshFace& tri) {
     const ofVec3f& v1 = tri.getVertex(0);
     const ofVec3f& v2 = tri.getVertex(1);
     const ofVec3f& v3 = tri.getVertex(2);
@@ -127,7 +127,7 @@ static float signedVolume(const ofMeshFace& tri) {
     float v213 = v2.x * v1.y * v3.z;
     float v123 = v1.x * v2.y * v3.z;
     return (-v321 + v231 + v312 - v132 - v213 + v123) / 6.f;
-}
+}*/
 
 // computes integral x^p*y^q*z^r dxdydz over the tetrahedron formed by a face and the
 // origin, where two of p,q,r are 0. The param "coord" determines which of x,y,z has the nonzero
@@ -213,6 +213,58 @@ static void signedMoment2(const ofMeshFace& tri,
     *Mxz = 0.5f * (delta[2] / 60.f) * (V[0].x*g[0][Z] + V[1].x*g[1][Z] + V[2].x*g[2][Z]);
 }
 
+void RigidBody::computeMIBodyIBodyInv() {
+    // compute zeroth and first order moments
+    float M = 0.f;                          // volume
+    float Mx = 0.f, My = 0.f, Mz = 0.f;     // center of mass
+    const vector<ofMeshFace>* triangles = &mesh.getUniqueFaces();
+    for (const ofMeshFace& tri : *triangles) {
+        M += signedMoment(tri, 0, 0);
+        Mx += signedMoment(tri, 0, 1);
+        My += signedMoment(tri, 1, 1);
+        Mz += signedMoment(tri, 2, 1);
+    }
+
+    m = material.rho * abs(M);  // mass
+    ofVec3f centerOfMass = ofVec3f(Mx, My, Mz) / M;
+
+    // move mesh so its center of mass is at origin
+    for (int i = 0; i < mesh.getNumVertices(); i++) {
+        mesh.setVertex(i, mesh.getVertex(i) - centerOfMass);
+    }
+    triangles = &mesh.getUniqueFaces();
+
+    // compute second-order moments
+    float Mxx = 0.f, Myy = 0.f, Mzz = 0.f;
+    float Mxy = 0.f, Myz = 0.f, Mxz = 0.f;
+    for (const ofMeshFace& tri : *triangles) {
+        float mxx, myy, mzz, mxy, myz, mxz;
+        signedMoment2(tri, &mxx, &myy, &mzz, &mxy, &myz, &mxz);
+        Mxx += mxx, Myy += myy, Mzz += mzz;
+        Mxy += mxy, Myz += myz, Mxz += mxz;
+    }
+
+    float Ixx = material.rho * (Myy + Mzz);
+    float Iyy = material.rho * (Mzz + Mxx);
+    float Izz = material.rho * (Mxx + Myy);
+    //float Ixy = material.density * Mxy;
+    //float Iyz = material.density * Myz;
+    //float Ixz = material.density * Mxz;
+    /*IBody = ofMatrix3x3(Ixx, -Ixy, -Ixz,    // moment of inertia
+    -Ixy, Iyy, -Iyz,
+    -Ixz, -Iyz, Izz);
+    IBodyInv = IBody.inverse();*/
+    //Ixx *= 100.f;
+    IBody = ofMatrix3x3(Ixx, 0.f, 0.f,    // assuming Ixy,Iyz,Ixz=0
+        0.f, Iyy, 0.f,
+        0.f, 0.f, Izz);
+    IBodyInv = ofMatrix3x3(1.f / Ixx, 0.f, 0.f,    // assuming Ixy,Iyz,Ixz=0
+        0.f, 1.f / Iyy, 0.f,
+        0.f, 0.f, 1.f / Izz);
+    IInv = IBodyInv;
+}
+
+
 RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, float alpha, float beta,
                      const string& objFileName, const Material& material, float sizeScale,
                      bool isSphere)
@@ -232,55 +284,7 @@ RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, 
 {
     readObj(objFileName, sizeScale, &mesh);
 
-    // compute zeroth and first order moments
-    float M = 0.f;
-    float Mx = 0.f, My = 0.f, Mz = 0.f;
-    const vector<ofMeshFace>* triangles = &mesh.getUniqueFaces();
-    for (const ofMeshFace& tri : *triangles) {
-        M += signedMoment(tri, 0, 0);
-        Mx += signedMoment(tri, 0, 1);
-        My += signedMoment(tri, 1, 1);
-        Mz += signedMoment(tri, 2, 1);
-    }
-
-    m = material.rho * abs(M);  // mass
-    ofVec3f centerOfMass = ofVec3f(Mx, My, Mz) / M;
-
-    // move mesh so its center of mass is at origin
-    for (int i = 0; i < mesh.getNumVertices(); i++) {
-        mesh.setVertex(i, mesh.getVertex(i) - centerOfMass);
-    }
-    triangles = &mesh.getUniqueFaces();
-    
-    // compute second-order moments
-    float Mxx = 0.f, Myy = 0.f, Mzz = 0.f;
-    float Mxy = 0.f, Myz = 0.f, Mxz = 0.f;
-    for (const ofMeshFace& tri : *triangles) {
-        float mxx, myy, mzz, mxy, myz, mxz;
-        signedMoment2(tri, &mxx, &myy, &mzz, &mxy, &myz, &mxz);
-        Mxx += mxx, Myy += myy, Mzz += mzz;
-        Mxy += mxy, Myz += myz, Mxz += mxz;
-    }
-
-    float Ixx = material.rho * (Myy + Mzz);
-    float Iyy = material.rho * (Mzz + Mxx);
-    float Izz = material.rho * (Mxx + Myy);
-    //float Ixy = material.density * Mxy;
-    //float Iyz = material.density * Myz;
-    //float Ixz = material.density * Mxz;
-    /*IBody = ofMatrix3x3(Ixx, -Ixy, -Ixz,    // moment of inertia
-                        -Ixy, Iyy, -Iyz,
-                        -Ixz, -Iyz, Izz);
-    IBodyInv = IBody.inverse();*/
-    //Ixx *= 100.f;
-    IBody = ofMatrix3x3(Ixx, 0.f, 0.f,    // assuming Ixy,Iyz,Ixz=0
-                        0.f, Iyy, 0.f,
-                        0.f, 0.f, Izz);
-    IBodyInv = ofMatrix3x3(1.f/Ixx, 0.f, 0.f,    // assuming Ixy,Iyz,Ixz=0
-                           0.f, 1.f/Iyy, 0.f,
-                           0.f, 0.f, 1.f/Izz);
-    IInv = IBodyInv;
-
+    computeMIBodyIBodyInv();
 
     readModes(modesFileName, E, nu, rho, sizeScale, &phi, &omega);
     assert(phi.size() == omega.size());
@@ -368,14 +372,6 @@ void RigidBody::stepW(float dt) {
 int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float dt_q, float* qSum) {
 
     float h = dt_q;
-
-    /*
-    // damping params
-    const float alpha = 0.f;
-    //const float beta = 0.0000001f;        // sphere
-    //const float beta = 0.00001f;          // ground
-    const float beta = 0.00000000001f;          // rod
-    */
 
     // all impulses will be spread out over the first time-step of q as constant forces.
     // convert the impulses to forces in bodyspace.
