@@ -103,33 +103,68 @@ void signedMoment2(const ofMeshFace& tri,
 }
 
 
-void computeHankels(double kr, int n, vector<complex<double>>* h) {
+void computeHankels(double kr, int N, vector<complex<double>>& h) {
     const complex<double> I(0.0, 1.0);
-    h->resize(n);
+    h.resize(N);
 
-    if (n <= 0) return;
+    if (N <= 0) return;
     complex<double> e_neg_iz = exp(-I*kr);
-    (*h)[0] = I / kr * e_neg_iz;
-    if (n == 1) return;
-    (*h)[1] = -(kr - I) / (kr*kr) * e_neg_iz;
+    h[0] = I / kr * e_neg_iz;
+    if (N == 1) return;
+    h[1] = -(kr - I) / (kr*kr) * e_neg_iz;
 
-    for (int i = 1; i < n - 1; i++) {
-        (*h)[i + 1] = (2*i+1)/kr * (*h)[i] - (*h)[i - 1];
+    for (int n = 1; n < N - 1; n++) {
+        h[n + 1] = (2 * n + 1) / kr * h[n] - h[n - 1];
     }
 }
 
-void computeHankelsAndDerivatives(double kr, int n, vector<complex<double>>* h, vector<complex<double>>* h1) {
-    if (n <= 0) {
-        h->clear();
-        h1->clear();
+void computeHankelsAndDerivatives(double kr, int N, vector<complex<double>>& h, vector<complex<double>>& h1) {
+    if (N <= 0) {
+        h.clear();
+        h1.clear();
         return;
     }
     const complex<double> I(0.0, 1.0);
-    computeHankels(kr, n + 1, h);
-    h1->resize(n);
-    (*h1)[0] = (kr - I)*exp(-I*kr) / (kr*kr);
-    for (int i = 1; i < n; i++) {
-        (*h1)[i] = 0.5 * ( (*h)[i-1] - (*h)[i]/kr + (*h)[i+1] );
+    computeHankels(kr, N + 1, h);
+    h1.resize(N);
+    h1[0] = (kr - I)*exp(-I*kr) / (kr*kr);
+    for (int n = 1; n < N; n++) {
+        h1[n] = 0.5 * (h[n - 1] - h[n] / kr + h[n + 1]);
     }
-    h->pop_back();
+    h.pop_back();
 }
+
+// Associated Legendre polynomials
+// Recurrence formulas from here:
+// https://en.wikipedia.org/wiki/Associated_Legendre_polynomials#Recurrence_formula
+void computeLegendrePolys(double x, int N, vector<double>& P_storage, vector<double*>& P) {
+    assert(-1.0 <= x && x <= 1.0);
+    P_storage.resize(N*N);
+    P.resize(N);
+
+    if (N <= 0) return;
+    P[0] = &P_storage[0];
+    P[0][0] = 1.0;
+    if (N == 1) return;
+    P[1] = &P_storage[2];
+    double sqrt_one_minus_xx = sqrt(max(1.0 - x*x, 0.0));
+    P[1][-1] = 0.5 * sqrt_one_minus_xx;
+    P[1][0] = x;
+    P[1][1] = -sqrt_one_minus_xx;
+
+    for (int n = 1; n < N - 1; n++) {
+        // compute pointer to P(n+1)(0)
+        P[n + 1] = P[n] + (2 * n + 2);
+        // compute P(n+1) for all m except for the 4 outermost m
+        for (int m = -n + 1; m <= n - 1; m++) {
+            P[n + 1][m] = ((2 * n + 1)*x*P[n][m] - (n + m)*P[n - 1][m]) / (n - m + 1);
+        }
+        // compute P(n+1) for the 2 largest m
+        P[n + 1][n + 1] = -(2 * n + 1) * sqrt_one_minus_xx * P[n][n];
+        P[n + 1][n] = x * (2 * n + 1) * P[n][n];
+        // compute P(n+1) for the 2 smallest m (I derived these two formulas)
+        P[n + 1][-n - 1] = sqrt_one_minus_xx / (2 * n + 2) * P[n][-n];
+        P[n + 1][-n] = x * P[n][-n];
+    }
+}
+
