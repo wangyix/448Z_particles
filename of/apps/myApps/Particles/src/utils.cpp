@@ -197,3 +197,22 @@ void computeLegendrePolysAndDerivatives(double x, int N, vector<double>& P_stora
         P1[n][-n] = ( sqrt_one_minus_xx*P[n][-n + 1] - n*x*P[n][-n] ) / (x*x - 1.0);
     }
 }
+
+void computeYConstants(int N, vector<double>& C_storage, vector<double*>& C) {
+    C_storage.resize(N*N);
+    C.resize(N);
+    if (N <= 0) return;
+    C[0] = &C_storage[0];
+    C[0][0] = sqrt(0.25 / PI);
+
+    for (int n = 1; n < N; n++) {
+        C[n] = C[n - 1] + (2 * n);
+        C[n][0] = sqrt((2 * n + 1) / (4.0 * PI));
+        for (int m = 1; m <= n; m++) {
+            C[n][m] = C[n][m - 1] / sqrt((n - m + 1)*(n + m));
+        }
+        for (int m = -1; m >= -n; m--) {
+            C[n][m] = C[n][m + 1] * sqrt((n - m)*(n + m + 1));
+        }
+    }
+}
