@@ -129,7 +129,7 @@ void computeHankelsAndDerivatives(double kr, int N, vector<complex<double>>& h, 
     h1.resize(N);
     h1[0] = (kr - I)*exp(-I*kr) / (kr*kr);
     for (int n = 1; n < N; n++) {
-        h1[n] = 0.5 * (h[n - 1] - h[n] / kr + h[n + 1]);
+        h1[n] = 0.5 * (h[n - 1] - h[n] / kr - h[n + 1]);
     }
     h.pop_back();
 }
