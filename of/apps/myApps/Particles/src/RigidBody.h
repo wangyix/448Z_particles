@@ -35,7 +35,8 @@ public:
     void step(float dt);
     void stepW(float dt);
     
-    int stepAudio(float dt, const vector<VertexImpulse>& impulses, float dt_q, float* qSum);
+    int stepAudio(float dt, const vector<VertexImpulse>& impulses, float dt_q, 
+                  const ofVec3f& listenPos, float* samples);
 
     int closestVertexIndex(const ofVec3f& worldPos) const;
 
@@ -47,6 +48,7 @@ private:
     void readModes(const string& fileName, float E, float nu, float rho, float sizeScale,
         vector<vector<ofVec3f>>* phi, vector<float>* omega);
     void computeModeCoeffs(const vector<float>& vertexAreaSums);
+    double evaluateAbsTransferFunction(const vector<complex<double>>& Y, int mode);
 public:
     ofMesh mesh;
     const Material& material;
@@ -113,7 +115,8 @@ public:
     ASSERT_EQ(r,    S.rows());
     ASSERT_EQ(1,    S.cols());
   */
-    
+    vector<int> modeExpansionOrders;
+    int modeExpansionMaxOrder;
     vector<vector<complex<double>>> modeCoeffs;
 };
 

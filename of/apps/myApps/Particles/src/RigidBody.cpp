@@ -208,6 +208,8 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
 
     int numModes = omega.size();
     modeCoeffs.resize(numModes);
+    modeExpansionOrders.resize(numModes);
+    modeExpansionMaxOrder = 0;
 
     vector<double> C_storage;
     vector<double*> C;
@@ -219,6 +221,10 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
         double k = w / c;
 
         int N = 4;      // basis functions order, 1 past highest (e.g. 2 means dipoles);
+        modeExpansionOrders[j] = N;
+        if (N > modeExpansionMaxOrder) {
+            modeExpansionMaxOrder = N;
+        }
         
         const vector<ofVec3f>& vertices = mesh.getVertices();
         const vector<ofVec3f>& normals = mesh.getNormals();
@@ -285,6 +291,33 @@ assert(!isnan(b(vi).real()) && !isnan(b(vi).imag()));
             coeffs[i] = c(i);
         }
     }
+}
+
+// point should be given in obj space
+double RigidBody::evaluateAbsTransferFunction(const vector<complex<double>>& Y, int mode) {
+    const complex<double> I(0.0, 1.0);
+    const double c = 340.0;
+
+    float w = omega[mode];
+    double k = w / c;
+    int N = modeExpansionOrders[mode];
+    const vector<complex<double>>& coeffs = modeCoeffs[mode];
+    assert(coeffs.size() == N*N);
+
+    vector<complex<double>> h;
+    computeHankels(k*r, N, h);
+
+    complex<double> expansionSum(0.0, 0.0);
+    int i = 0;
+    for (int n = 0; n < N; n++) {
+        for (int m = -n; m <= n; m++) {
+            complex<double> Snm = h[n] * Y[i];
+            expansionSum += (coeffs[i] * Snm);
+            i++;
+        }
+    }
+    assert(i == N*N);
+    return abs(expansionSum);
 }
 
 
@@ -394,7 +427,11 @@ void RigidBody::stepW(float dt) {
     w = R * wBody;
 }
 
-int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float dt_q, float* qSum) {
+int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float dt_q,
+                         const ofVec3f& listenPos, float* samples) {
+
+    vector<complex<double>> sphericalHarmonics;
+    computeSphericalHarmonics(modeExpansionMaxOrder, RInv * listenPos, sphericalHarmonics);
 
     float h = dt_q;
 
@@ -413,13 +450,12 @@ int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float 
         const vector<float>& qk2 = qq[(qkAt + 1) % 3];
         vector<float>& qk = qq[qkAt];
         
-        float qkSum = 0.f;
+        float pSum = 0.f;
         for (int i = 0; i < qk.size(); i++) {
             float wi = omega[i];
             float xii = 0.5f * (alpha/wi + beta*wi);
-            //if (0.f < xii && xii < 1.f) {    // underdamped (overdamped frequencies were already removed)
-//if (i >= qk.size() - topNModesOnly) {
-if (0.f < xii && xii < 1.f &&
+            //if (0.f < xii && xii < 1.f) {    // underdamped (don't need this; overdamped frequencies were removed)
+if (0.f < xii && xii < 1.f &&   // for tuning damping params
     ((topModes && i >= qk.size()-nModesOnly) || (!topModes && i < nModesOnly))) {
                 float wdi = wi * sqrtf(1 - xii*xii);
 
@@ -443,18 +479,16 @@ if (0.f < xii && xii < 1.f &&
 } else {
     qk[i] = 0.f;
 }
-            //} else {
-            //    qk[i] = 0.f;
-            //}
             assert(!isnan(qk[i]));
-            qkSum += qk[i];
+            pSum += qk[i] * evaluateAbsTransferFunction(sphericalHarmonics, i);
         }
 
-        qSum[k] += qkSum;
+        samples[k] += pSum;
     }
 
     return qsToCompute;
 }
+
 int RigidBody::closestVertexIndex(const ofVec3f& worldPos) const {
     ofVec3f r = RInv * (worldPos - x);
     float minDistSq = numeric_limits<float>::max();

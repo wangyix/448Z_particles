@@ -16,4 +16,6 @@ void computeLegendrePolys(double x, int N, vector<double>& P_storage, vector<dou
 void computeLegendrePolysAndDerivatives(double x, int N, vector<double>& P_storage, vector<double*>& P,
                                         vector<double>& P1_storage, vector<double*>& P1);
 
+void computeSphericalHarmonics(int N, const ofVec3f& p, vector<complex<double>>& Y_storage);
+
 #endif
