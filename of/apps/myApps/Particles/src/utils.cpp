@@ -104,7 +104,6 @@ void signedMoment2(const ofMeshFace& tri,
 
 
 void computeHankels(double kr, int N, vector<complex<double>>& h) {
-    const complex<double> I(0.0, 1.0);
     h.resize(N);
 
     if (N <= 0) return;
@@ -124,7 +123,6 @@ void computeHankelsAndDerivatives(double kr, int N, vector<complex<double>>& h, 
         h1.clear();
         return;
     }
-    const complex<double> I(0.0, 1.0);
     computeHankels(kr, N + 1, h);
     h1.resize(N);
     h1[0] = (kr - I)*exp(-I*kr) / (kr*kr);
@@ -222,8 +220,6 @@ void computeYConstants(int N, vector<double>& C_storage, vector<double*>& C) {
 }
 
 void computeSphericalHarmonics(int N, const ofVec3f& p, vector<complex<double>>& Y_storage) {
-    const complex<double> I(0.0, 1.0);
-
     double r = p.length();
     double phi = atan2(p.y, p.x);
 
