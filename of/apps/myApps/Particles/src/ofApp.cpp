@@ -77,7 +77,7 @@ void ofApp::setup(){
 
     audioBuffer.pushZeros(AUDIO_SAMPLES_PAD);
 
-    pScale = 0.005f;
+    pScale = 0.01f;
     accelAudioScale = 0.08f;
 }
 

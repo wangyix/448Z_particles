@@ -221,7 +221,7 @@ ofstream of("./mode_coeffs.txt", ios::out | ios::trunc);
         double w = omega[j];
         double k = w / c;
 
-        int N = 4;      // basis functions order, 1 past highest (e.g. 2 means dipoles);
+        int N = 3;      // basis functions order, 1 past highest (e.g. 2 means dipoles);
         modeExpansionOrders[j] = N;
         if (N > modeExpansionMaxOrder) {
             modeExpansionMaxOrder = N;
@@ -433,12 +433,18 @@ void RigidBody::stepW(float dt) {
 
 int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float dt_q,
                          const ofVec3f& listenPos, float* samples) {
+    int numModes = omega.size();
+
+    // evaluate the transfer function of each mode
+    vector<float> absTransferFunctions(numModes);
 
     ofVec3f listenPos_obj = RInv * listenPos;
     float listenDist_obj = listenPos_obj.length();
-
     vector<complex<double>> sphericalHarmonics;
     computeSphericalHarmonics(modeExpansionMaxOrder, listenPos_obj, sphericalHarmonics);
+    for (int i = 0; i < numModes; i++) {
+        absTransferFunctions[i] = evaluateAbsTransferFunction(sphericalHarmonics, i, listenDist_obj);
+    }
 
     float h = dt_q;
 
@@ -458,12 +464,12 @@ int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float 
         vector<float>& qk = qq[qkAt];
         
         float pSum = 0.f;
-        for (int i = 0; i < qk.size(); i++) {
+        for (int i = 0; i < numModes; i++) {
             float wi = omega[i];
             float xii = 0.5f * (alpha/wi + beta*wi);
             //if (0.f < xii && xii < 1.f) {    // underdamped (don't need this; overdamped frequencies were removed)
 if (0.f < xii && xii < 1.f &&   // for tuning damping params
-    ((topModes && i >= qk.size()-nModesOnly) || (!topModes && i < nModesOnly))) {
+    ((topModes && i >= numModes-nModesOnly) || (!topModes && i < nModesOnly))) {
                 float wdi = wi * sqrtf(1 - xii*xii);
 
                 float ei = exp(-xii*wi*h);
@@ -487,7 +493,7 @@ if (0.f < xii && xii < 1.f &&   // for tuning damping params
     qk[i] = 0.f;
 }
             assert(!isnan(qk[i]));
-            pSum += qk[i] * evaluateAbsTransferFunction(sphericalHarmonics, i, listenDist_obj);
+            pSum += qk[i] * absTransferFunctions[i];
         }
 
         samples[k] += pSum;
