@@ -1,4 +1,5 @@
 #include "ofApp.h"
+#include "utils.h"
 
 #include <assert.h>
 #include <algorithm>
@@ -462,7 +463,7 @@ SConst *= 20.f;
 
         // compute acceleration noise samples for this collision
         // TODO: check for possible overrun of accelAudioSamples array
-        int i = SECONDS_TO_SAMPLES((contactPos - listenPos).length() / 340.f);  // retarded time
+        int i = SECONDS_TO_SAMPLES((contactPos - listenPos).length() / airC);  // retarded time
         if (i < accelAudioStart) {
             accelAudioStart = i;
         }

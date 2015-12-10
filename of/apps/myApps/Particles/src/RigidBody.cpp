@@ -175,8 +175,6 @@ void RigidBody::computeMIBodyIBodyInv() {
 
 // For checking analytical dSdn value with numerical value
 /*static complex<double> Snm(int n, int m, const ofVec3f& p, double k) {
-    const complex<double> I(0.0, 1.0);
-
     vector<double> C_storage;
     vector<double*> C;
     computeYConstants(n+1, C_storage, C);    // N should be the max out of all the modes
@@ -199,10 +197,6 @@ void RigidBody::computeMIBodyIBodyInv() {
 
 
 void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
-    const double c = 340.0;
-    const double fluidRho = 1.225;
-    const complex<double> I(0.0, 1.0);
-
     int numVertices = mesh.getNumVertices();
     assert(vertexAreaSums.size() == numVertices);
 
@@ -219,7 +213,7 @@ ofstream of("./mode_coeffs.txt", ios::out | ios::trunc);
     for (int j = 0; j < numModes; j++) {
         const vector<ofVec3f>& modeDisplacements = phi[j];
         double w = omega[j];
-        double k = w / c;
+        double k = w / airC;
 
         int N = 3;      // basis functions order, 1 past highest (e.g. 2 means dipoles);
         modeExpansionOrders[j] = N;
@@ -299,11 +293,8 @@ of.close();
 
 // point should be given in obj space
 double RigidBody::evaluateAbsTransferFunction(const vector<complex<double>>& Y, int mode, double r) {
-    const complex<double> I(0.0, 1.0);
-    const double c = 340.0;
-
     float w = omega[mode];
-    double k = w / c;
+    double k = w / airC;
     int N = modeExpansionOrders[mode];
     const vector<complex<double>>& coeffs = modeCoeffs[mode];
     assert(coeffs.size() == N*N);

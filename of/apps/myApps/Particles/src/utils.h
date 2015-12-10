@@ -5,6 +5,10 @@
 
 #include <complex>
 
+const double airC = 340.0;
+const double fluidRho = 1.225;
+const complex<double> I(0.0, 1.0);
+
 float signedMoment(const ofMeshFace& tri, int coord, int pow);
 void signedMoment2(const ofMeshFace& tri, float* Mxx, float* Myy, float* Mzz,
                                           float* Mxy, float* Myz, float* Mxz);
