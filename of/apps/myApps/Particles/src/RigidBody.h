@@ -46,8 +46,7 @@ private:
     void computeMIBodyIBodyInv();
     void readModes(const string& fileName, float E, float nu, float rho, float sizeScale,
         vector<vector<ofVec3f>>* phi, vector<float>* omega);
-    void computeModesMultipoleCoeffs();
-
+    void computeModeCoeffs(const vector<float>& vertexAreaSums);
 public:
     ofMesh mesh;
     const Material& material;
@@ -72,7 +71,7 @@ public:
 
 
     // Modes (Constant)
-    vector<vector<ofVec3f>> phi;    // eigenvectors
+    vector<vector<ofVec3f>> phi;    // eigenvectors (mode displacements)
     vector<float> omega;            // natural frequencies
 
     // Modal amplitudes
@@ -114,7 +113,7 @@ public:
     ASSERT_EQ(r,    S.rows());
     ASSERT_EQ(1,    S.cols());
   */
-
+    
     vector<vector<complex<double>>> modeCoeffs;
 };
 

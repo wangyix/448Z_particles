@@ -5,7 +5,7 @@
 #include <iostream>
 #include <fstream>
 
-static void readObj(const string& fileName, float scale, ofMesh* mesh) {
+void readObj(const string& fileName, float scale, ofMesh& mesh, vector<float>& vertexAreaSums) {
     cout << "Reading geometry data from " << fileName << endl;
     ifstream file;
     file.open(fileName, ios::in);
@@ -13,7 +13,7 @@ static void readObj(const string& fileName, float scale, ofMesh* mesh) {
         cout << "Failed to open " << fileName << endl;
         return;
     }
-    mesh->clear();
+    mesh.clear();
     vector<ofVec3f> normals;
     string line;
     while (getline(file, line)) {
@@ -24,20 +24,22 @@ static void readObj(const string& fileName, float scale, ofMesh* mesh) {
         else if (c == 'v') {
             ofVec3f v;
             iss >> v.x >> v.y >> v.z;
-            mesh->addVertex(v * scale);
+            mesh.addVertex(v * scale);
             normals.emplace_back(0.f, 0.f, 0.f);
+            vertexAreaSums.push_back(0.f);
         } else if (c == 'f') {
             int indices[3];
             iss >> indices[0] >> indices[1] >> indices[2];
             ofVec3f v[3];
             for (int i = 0; i < 3; i++) {
-                v[i] = mesh->getVertex(--indices[i]);
+                v[i] = mesh.getVertex(--indices[i]);
             }
-            ofVec3f n_area = (v[1] - v[0]).crossed(v[2] - v[0]);
+            ofVec3f n_double_area = (v[1] - v[0]).crossed(v[2] - v[0]);
             for (int i = 0; i < 3; i++) {
-                normals[indices[i]] += n_area;
+                normals[indices[i]] += n_double_area;
+                vertexAreaSums[indices[i]] += 0.5f * n_double_area.length();
             }
-            mesh->addTriangle(indices[0], indices[1], indices[2]);
+            mesh.addTriangle(indices[0], indices[1], indices[2]);
         } else{
             std::cout << "Warning: unrecognized line type " << c << endl;
         }
@@ -46,8 +48,8 @@ static void readObj(const string& fileName, float scale, ofMesh* mesh) {
     for (int i = 0; i < normals.size(); i++) {
         normals[i].normalize();
     }
-    mesh->addNormals(normals);
-    mesh->setMode(OF_PRIMITIVE_TRIANGLES);
+    mesh.addNormals(normals);
+    mesh.setMode(OF_PRIMITIVE_TRIANGLES);
 }
 
 void RigidBody::readModes(const string& fileName, float E, float nu, float rho, float sizeScale,
@@ -172,14 +174,85 @@ void RigidBody::computeMIBodyIBodyInv() {
 }
 
 
+void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
+    const double c = 340.0;
+    const double fluidRho = 1.225;
+    const complex<double> I(0.0, 1.0);
 
-void RigidBody::computeModesMultipoleCoeffs() {
-    for (int j = 0; j < omega.size(); j++) {
-        float w = omega[j];
+    int numVertices = mesh.getNumVertices();
+    assert(vertexAreaSums.size() == numVertices);
 
+    int numModes = omega.size();
+    modeCoeffs.resize(numModes);
+
+    vector<double> C_storage;
+    vector<double*> C;
+    computeYConstants(10, C_storage, C);    // N should be the max out of all the modes
+
+    for (int j = 0; j < numModes; j++) {
+        const vector<ofVec3f>& modeDisplacements = phi[j];
+        double w = omega[j];
+        double k = w / c;
+
+        int N = 4;      // basis functions order, 1 past highest (e.g. 2 means dipoles);
+        
+        const vector<ofVec3f>& vertices = mesh.getVertices();
+        const vector<ofVec3f>& normals = mesh.getNormals();
+
+        Eigen::MatrixXcd A(numVertices, N*N);
+        Eigen::VectorXcd b(numVertices);
+
+        for (int vi = 0; vi < mesh.getNumVertices(); vi++) {
+            const ofVec3f& p = vertices[vi];
+            const ofVec3f& normal = normals[vi];
+            double weight = vertexAreaSums[vi];
+            
+            // compute row of A: the normal derivatives of each basis function at this vertex
+            double r = p.length();
+            //double theta = acos(x.z / r);
+            double phi = atan2(p.y, p.x);
+            vector<complex<double>> h, h1;
+            computeHankelsAndDerivatives(k*r, N, h, h1);
+            vector<double> P_storage, P1_storage;
+            vector<double*> P, P1;
+            computeLegendrePolysAndDerivatives(p.z/r, N, P_storage, P, P1_storage, P1);
+
+            double x2_plus_y2 = p.x*p.x + p.y*p.y;
+            double sqrt_x2_plus_y2 = sqrt(x2_plus_y2);
+            double nx = normal.x, ny = normal.y, nz = normal.z;
+
+            int col = 0;
+            for (int n = 0; n < N; n++) {
+                for (int m = -n; m <= n; m++) {
+                    complex<double> hpe1 = h[n] * P[n][m] * I*(double)m*(p.x*ny - p.y*nx) / (double)(x2_plus_y2);
+                    complex<double> hp1e = h[n] * P1[n][m] * (nz - p.z*(p.x*nx + p.y*ny)/x2_plus_y2) / sqrt_x2_plus_y2;
+                    complex<double> h1pe = h1[n] * k * (p.dot(normal) / r) * P[n][m];
+                    A(vi, col) = weight * C[n][m] * exp(I*(double)m*phi) * (hpe1 + hp1e + h1pe);
+                    col++;
+                }
+            }
+            assert(col == N*N);
+
+            // compute element of b: the normal derivative of the transfer function
+            // (Neumann boundary condition) at this vertex
+            b(vi) = weight * fluidRho * w * w* modeDisplacements[vi].dot(normal);
+        }
+
+        // Find least-squares solution to Ac = b using TSVD
+        Eigen::JacobiSVD<Eigen::MatrixXcd> svd;
+        svd.setThreshold(0.000001);
+        svd.compute(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Eigen::VectorXcd c = svd.solve(b);
+        assert(c.rows() == N*N);
+
+        // Record solution as the multipole coefficients for this mode
+        vector<complex<double>>& coeffs = modeCoeffs[j];
+        coeffs.resize(N*N);
+        for (int i = 0; i < coeffs.size(); i++) {
+            coeffs[i] = c(i);
+        }
     }
 }
-
 
 
 RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, float alpha, float beta,
@@ -199,7 +272,8 @@ RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, 
     beta(beta),
     isSphere(isSphere)
 {
-    readObj(objFileName, sizeScale, &mesh);
+    vector<float> vertexAreaSums;
+    readObj(objFileName, sizeScale, mesh, vertexAreaSums);
 
     computeMIBodyIBodyInv();
 
@@ -226,10 +300,11 @@ RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, 
         }
     }
 
-
     // FOR TUNING DAMPING PARAMS
     topModes = true;
     nModesOnly = 94;
+
+    computeModeCoeffs(vertexAreaSums);
 }
 
 void RigidBody::rotate(float rad, const ofVec3f& axis) {
