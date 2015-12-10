@@ -36,7 +36,7 @@ public:
     void stepW(float dt);
     
     int stepAudio(float dt, const vector<VertexImpulse>& impulses, float dt_q, 
-                  const ofVec3f& listenPos, float* samples);
+                  const ofVec3f& listenPos1, const ofVec3f& listenPos2, float* samples);
 
     int closestVertexIndex(const ofVec3f& worldPos) const;
 

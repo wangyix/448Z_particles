@@ -429,18 +429,24 @@ void RigidBody::stepW(float dt) {
 }
 
 int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float dt_q,
-                         const ofVec3f& listenPos, float* samples) {
+                         const ofVec3f& listenPos1, const ofVec3f& listenPos2, float* samples) {
     int numModes = omega.size();
 
-    // evaluate the transfer function of each mode
-    vector<float> absTransferFunctions(numModes);
+    // evaluate the transfer function of each mode for each listening position
+    vector<float> absTransferFunctions1(numModes);
+    vector<float> absTransferFunctions2(numModes);
 
-    ofVec3f listenPos_obj = RInv * listenPos;
-    float listenDist_obj = listenPos_obj.length();
-    vector<complex<double>> sphericalHarmonics;
-    computeSphericalHarmonics(modeExpansionMaxOrder, listenPos_obj, sphericalHarmonics);
+    ofVec3f listenPos1_obj = RInv * (listenPos1 - x);
+    float listenDist1_obj = listenPos1_obj.length();
+    ofVec3f listenPos2_obj = RInv * (listenPos2 - x);
+    float listenDist2_obj = listenPos2_obj.length();
+    vector<complex<double>> sphericalHarmonics1;
+    vector<complex<double>> sphericalHarmonics2;
+    computeSphericalHarmonics(modeExpansionMaxOrder, listenPos1_obj, sphericalHarmonics1);
+    computeSphericalHarmonics(modeExpansionMaxOrder, listenPos2_obj, sphericalHarmonics2);
     for (int i = 0; i < numModes; i++) {
-        absTransferFunctions[i] = evaluateAbsTransferFunction(sphericalHarmonics, i, listenDist_obj);
+        absTransferFunctions1[i] = evaluateAbsTransferFunction(sphericalHarmonics1, i, listenDist1_obj);
+        absTransferFunctions2[i] = evaluateAbsTransferFunction(sphericalHarmonics2, i, listenDist2_obj);
     }
 
     float h = dt_q;
@@ -460,7 +466,8 @@ int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float 
         const vector<float>& qk2 = qq[(qkAt + 1) % 3];
         vector<float>& qk = qq[qkAt];
         
-        float pSum = 0.f;
+        float pSum1 = 0.f;
+        float pSum2 = 0.f;
         for (int i = 0; i < numModes; i++) {
             float wi = omega[i];
             float xii = 0.5f * (alpha/wi + beta*wi);
@@ -490,13 +497,15 @@ if (0.f < xii && xii < 1.f &&   // for tuning damping params
     qk[i] = 0.f;
 }
             assert(!isnan(qk[i]));
-            pSum += qk[i] * absTransferFunctions[i];
+            pSum1 += qk[i] * absTransferFunctions1[i];
+            pSum2 += qk[i] * absTransferFunctions2[i];  // CHANGE THIS BACK TO 2!!!!!!!!!!!!
         }
 
-        samples[k] += pSum;
+        samples[2*k] += pSum1;
+        samples[2*k + 1] += pSum2;
     }
 
-    return qsToCompute;
+    return 2*qsToCompute;
 }
 
 int RigidBody::closestVertexIndex(const ofVec3f& worldPos) const {

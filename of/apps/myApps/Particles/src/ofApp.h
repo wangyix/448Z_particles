@@ -67,7 +67,7 @@ private:
     RingBuffer<float, CHANNELS * AUDIO_SAMPLE_RATE> accelAudioBuffer;
     mutex accelAudioBufferLock;
 
-    ofVec3f listenPos;
+    ofVec3f leftListenPos, rightListenPos;
 
     ofMatrix4x4 viewMatrix;
 

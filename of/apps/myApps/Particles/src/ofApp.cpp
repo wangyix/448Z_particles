@@ -35,8 +35,8 @@ void ofApp::setup(){
     windowResized(ofGetWidth(), ofGetHeight());
 
     // initialize rigid bodies
-    bodies.push_back(RigidBody(groundModesFileName, 2e11f, 0.4f, 1.f, 30.f, 1e-11f, groundObjFileName, PLASTIC_MATERIAL, 0.008f));
-    //bodies.push_back(RigidBody(rodModesFileName, 7e10f, 0.3f, 1.f, 50.f, 1e-11f, rodObjFileName, PLASTIC_MATERIAL, 1.f));
+    //bodies.push_back(RigidBody(groundModesFileName, 2e11f, 0.4f, 1.f, 30.f, 1e-11f, groundObjFileName, PLASTIC_MATERIAL, 0.008f));
+    bodies.push_back(RigidBody(rodModesFileName, 7e10f, 0.3f, 1.f, 50.f, 1e-11f, rodObjFileName, PLASTIC_MATERIAL, 1.f));
     //sphereBodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.04f, true));
     //sphereBodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.06f, true));
     //sphereBodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.09f, true));
@@ -70,8 +70,6 @@ void ofApp::setup(){
 
     gravity = ofVec3f(0.f, GRAVITY_MAG, 0.f);
     attract = false;
-
-    listenPos = ofVec3f(0.5f * (pMin.x + pMax.x), 0.5f * (pMin.y + pMax.y), BOX_ZMAX);
 
     ofSoundStreamSetup(CHANNELS, 0, AUDIO_SAMPLE_RATE, BUFFER_SIZE, 4);
     //ofSetFrameRate(100);
@@ -223,21 +221,26 @@ static float computeTau(float r1Inv, float m1Inv, float v1, float E1,
     return 2.87f * pow((m*m / (r*E*E*abs(V))), 0.2);
 }
 
-static float computeSConst(const ofVec3f& p, float r, float m,
-                           const ofVec3f& listenPos, float tau, const ofVec3f& impulse) {
-    ofVec3f toListener = listenPos - p;
-    float dist = toListener.length();
-    ofVec3f toListenerDir = toListener / dist;
+static void computeSConst(const ofVec3f& p, float r, float m, float tau, const ofVec3f& impulse,
+        const ofVec3f& listenPos1, const ofVec3f& listenPos2, float* SConst1, float* SConst2) {
+    ofVec3f toListener1 = listenPos1 - p;
+    float dist1 = toListener1.length();
+    ofVec3f toListenerDir1 = toListener1 / dist1;
+
+    ofVec3f toListener2 = listenPos2 - p;
+    float dist2 = toListener2.length();
+    ofVec3f toListenerDir2 = toListener2 / dist2;
 
     float J = impulse.length();
     ofVec3f VDir = impulse / J;
 
-    float pConst = 1.2f * r * r * r * VDir.dot(toListenerDir) / (2.f * 330.f * dist);
+    float pConst1 = 1.2f * r * r * r * VDir.dot(toListenerDir1) / (2.f * 330.f * dist1);
+    float pConst2 = 1.2f * r * r * r * VDir.dot(toListenerDir2) / (2.f * 330.f * dist2);    
     float d2Vdt2Const = PI / (2.f * m * tau) * abs(J);
     float SConst = -12.f / (tau * tau);
 
-    float combinedConst = pConst * d2Vdt2Const * SConst;
-    return combinedConst;
+    *SConst1 = pConst1 * d2Vdt2Const * SConst;
+    *SConst2 = pConst2 * d2Vdt2Const * SConst;
 }
 
 static ofVec3f wallIdToNormal(int wallId) {
@@ -290,9 +293,9 @@ void ofApp::update() {
 
     const float e = 0.5f;   // coefficient of restitution
 
-    float pressure[AUDIO_SAMPLE_RATE];    // 1 second worth
-    memset(pressure, 0, AUDIO_SAMPLE_RATE*sizeof(float));
-    int psComputed = 0;
+    float modalAudioSamples[SECONDS_TO_SAMPLES(0.5)];
+    memset(modalAudioSamples, 0, SECONDS_TO_SAMPLES(0.5)*sizeof(float));
+    int modalSamplesComputed = 0;
 
     // compute collisions of vertices against walls
     for (RigidBody& body : bodies) {
@@ -351,9 +354,10 @@ void ofApp::update() {
         body.stepW(dt);
 
         // compute modal noise amplitudes
-        int qsComputedThisBody = body.stepAudio(dt, impulses, 1.f / AUDIO_SAMPLE_RATE, listenPos, pressure);
-        if (qsComputedThisBody > psComputed) {
-            psComputed = qsComputedThisBody;
+        int samplesComputedThisBody = body.stepAudio(dt, impulses, 1.f / AUDIO_SAMPLE_RATE,
+            leftListenPos, rightListenPos, modalAudioSamples);
+        if (samplesComputedThisBody > modalSamplesComputed) {
+            modalSamplesComputed = samplesComputedThisBody;
         }
     }
 
@@ -408,7 +412,7 @@ void ofApp::update() {
         RigidBody& sphereBody = sphereBodies[i_c];
 
         float tau;
-        float SConst;
+        float SConstLeft, SConstRight;
         ofVec3f contactPos;
         if (j_c < NONE) {   // sphere-wall collision
             int wallId = j_c;
@@ -427,7 +431,8 @@ void ofApp::update() {
             // compute tau, SConst for sphere-wall collision
             tau = computeTau(1.f / sphereBody.r, 1.f / sphereBody.m, sphereBody.material.nu, sphereBody.material.E,
                 0.f, 0.f, wallMaterial.nu, wallMaterial.E, vn);
-            SConst = computeSConst(sphereBody.x, sphereBody.r, sphereBody.m, listenPos, tau, impulse);
+            computeSConst(sphereBody.x, sphereBody.r, sphereBody.m, tau, impulse,
+                leftListenPos, rightListenPos, &SConstLeft, &SConstRight);
 
             // record impulse for modal sound computation later
             sphereImpulses[i_c].emplace_back(sphereBody.closestVertexIndex(contactPos), impulse);
@@ -451,10 +456,17 @@ void ofApp::update() {
             // compute tau, SConst
             tau = computeTau(1.f / sphereBody.r, 1.f / sphereBody.m, sphereBody.material.nu, sphereBody.material.E,
                 1.f / sphereBody2.r, 1.f / sphereBody2.m, sphereBody2.material.nu, sphereBody2.material.E, abs(vn));
-            float SConst1 = computeSConst(sphereBody.x, sphereBody.r, sphereBody.m, listenPos, tau, impulse);
-            float SConst2 = computeSConst(sphereBody2.x, sphereBody2.r, sphereBody2.m, listenPos, tau, -impulse);
-            SConst = SConst1 + SConst2;
-SConst *= 20.f;
+
+            float SConstLeft1, SConstRight1;
+            computeSConst(sphereBody.x, sphereBody.r, sphereBody.m, tau, impulse,
+                leftListenPos, rightListenPos, &SConstLeft1, &SConstRight1);
+            float SConstLeft2, SConstRight2;
+            computeSConst(sphereBody2.x, sphereBody2.r, sphereBody2.m, tau, -impulse,
+                leftListenPos, rightListenPos, &SConstLeft2, &SConstRight2);
+            SConstLeft = SConstLeft1 + SConstLeft2;
+            SConstRight = SConstRight1 + SConstRight2;
+SConstLeft *= 20.f;
+SConstRight *= 20.f;
 
             // record impulse for modal sound computation later
             sphereImpulses[i_c].emplace_back(sphereBody.closestVertexIndex(contactPos), impulse);
@@ -463,18 +475,34 @@ SConst *= 20.f;
 
         // compute acceleration noise samples for this collision
         // TODO: check for possible overrun of accelAudioSamples array
-        int i = SECONDS_TO_SAMPLES((contactPos - listenPos).length() / airC);  // retarded time
-        if (i < accelAudioStart) {
-            accelAudioStart = i;
-        }
-        for (float t = 0.f; t < tau; t += 1.f / AUDIO_SAMPLE_RATE) {
-            float sample = (accelAudioScale * SConst) * (t - 0.5f * tau) * sin(PI*t / tau);
-            for (int j = 0; j < CHANNELS; j++) {
-                accelAudioSamples[i++] += sample;
+        {
+            int i = SECONDS_TO_SAMPLES((contactPos - leftListenPos).length() / airC);  // retarded time
+            if (i < accelAudioStart) {
+                accelAudioStart = i;
+            }
+            for (float t = 0.f; t < tau; t += 1.f / AUDIO_SAMPLE_RATE) {
+                float sample = (accelAudioScale * SConstLeft) * (t - 0.5f * tau) * sin(PI*t / tau);
+                accelAudioSamples[i] += sample;
+                i += 2;
+            }
+            if (i > accelAudioEnd) {
+                accelAudioEnd = i;
             }
         }
-        if (i > accelAudioEnd) {
-            accelAudioEnd = i;
+        {
+            int i = SECONDS_TO_SAMPLES((contactPos - rightListenPos).length() / airC);  // retarded time
+            i++; // start on a sample for the right speaker
+            if (i < accelAudioStart) {
+                accelAudioStart = i;
+            }
+            for (float t = 0.f; t < tau; t += 1.f / AUDIO_SAMPLE_RATE) {
+                float sample = (accelAudioScale * SConstRight) * (t - 0.5f * tau) * sin(PI*t / tau);
+                accelAudioSamples[i] += sample;
+                i += 2;
+            }
+            if (i > accelAudioEnd) {
+                accelAudioEnd = i;
+            }
         }
 
         dtProcessed += dt_c;
@@ -484,61 +512,59 @@ SConst *= 20.f;
         RigidBody& body = sphereBodies[i];
 
         // compute modal amplitues from impulses applied
-        int qsComputedThisBody = body.stepAudio(dt, sphereImpulses[i], 1.f / AUDIO_SAMPLE_RATE, listenPos, pressure);
-        if (qsComputedThisBody > psComputed) {
-            psComputed = qsComputedThisBody;
+        int samplesComputedThisBody = body.stepAudio(dt, sphereImpulses[i], 1.f / AUDIO_SAMPLE_RATE,
+            leftListenPos, rightListenPos, modalAudioSamples);
+        if (samplesComputedThisBody > modalSamplesComputed) {
+            modalSamplesComputed = samplesComputedThisBody;
         }
     }
 
 
-    // scale qSums to get audio samples
-    float audioSamples[CHANNELS * AUDIO_SAMPLE_RATE];   // 1 second worth
-    int audioSamplesComputed = 0;
-float maxSample = 0.f;
-float minSample = 0.f;
-    for (int k = 0; k < psComputed; k++) {
-        for (int i = 0; i < CHANNELS; i++) {
-            audioSamples[audioSamplesComputed++] = pScale * pressure[k];
-        }
-maxSample = max(maxSample, (pScale * pressure[k]));
-minSample = min(minSample, (pScale * pressure[k]));
+    // scale modal audio samples
+    float maxSample = 0.f;
+    float minSample = 0.f;
+    for (int i = 0; i < modalSamplesComputed; i++) {
+        modalAudioSamples[i] *= pScale;
+        maxSample = max(maxSample, modalAudioSamples[i]);
+        minSample = min(minSample, modalAudioSamples[i]);
     }
-if (maxSample > 1.f || minSample < -1.f) {
-    printf("%f\t\t%f ------------------------\n", maxSample, minSample);
-}else if (maxSample > 0.1f || minSample < -0.1f) {
-    printf("%f\t\t%f\n", maxSample, minSample);
-}
+    if (maxSample > 1.f || minSample < -1.f) {
+        printf("%f\t\t%f ------------------------\n", maxSample, minSample);
+    } else if (maxSample > 0.1f || minSample < -0.1f) {
+        printf("%f\t\t%f\n", maxSample, minSample);
+    }
     
-    // check if audioSamples has trailing zeros for sync adjustment
+    // check if modal audio samples has trailing zeros for sync adjustment
     const float threshold = 1e-9f;
-    int trailingZerosStartAt = audioSamplesComputed;
-    while (trailingZerosStartAt > 0 && abs(audioSamples[trailingZerosStartAt - 1]) < threshold) {
+    int trailingZerosStartAt = modalSamplesComputed;
+    while (trailingZerosStartAt > 0 && abs(modalAudioSamples[trailingZerosStartAt - 1]) < threshold) {
         trailingZerosStartAt--;
+    }
+    if (trailingZerosStartAt % 2 != 0) {
+        trailingZerosStartAt++;
     }
     assert(trailingZerosStartAt % CHANNELS == 0);
     
     // push audio samples
-    int audioSamplesToPush = audioSamplesComputed;
+    int modalSamplesToPush = modalSamplesComputed;
     audioBufferLock.lock();
     // only add/remove zeros if number of trailing zeros is sufficiently high;
     // this prevents situations where you remove a small part of a sin wave where it crosses 0
-    int trailingZeros = audioSamplesComputed - trailingZerosStartAt;
+    int trailingZeros = modalSamplesComputed - trailingZerosStartAt;
     if (trailingZeros > SECONDS_TO_SAMPLES(0.5f * dt)) {
-        int bufferSizeAfterPush = audioBuffer.size() + audioSamplesToPush;
+        int bufferSizeAfterPush = audioBuffer.size() + modalSamplesToPush;
         int zerosToAdd = AUDIO_SAMPLES_PAD - bufferSizeAfterPush;
         //printf("%d\n", zerosToAdd);
         if (zerosToAdd > 0) {
-            audioSamplesToPush += zerosToAdd;
-            memset(&audioSamples[audioSamplesComputed], 0, zerosToAdd*sizeof(float));
+            modalSamplesToPush += zerosToAdd;
+            memset(&modalAudioSamples[modalSamplesComputed], 0, zerosToAdd*sizeof(float));
         } else if (zerosToAdd < 0) {
             int zerosToRemove = -zerosToAdd;
-            audioSamplesToPush -= min(zerosToRemove, trailingZeros);
+            modalSamplesToPush -= min(zerosToRemove, trailingZeros);
         }
     } 
-    audioBuffer.push(audioSamples, audioSamplesToPush);
+    audioBuffer.push(modalAudioSamples, modalSamplesToPush);
     audioBufferLock.unlock();
-
-
 
 
     // push acceleration noise audio samples
@@ -773,6 +799,13 @@ void ofApp::windowResized(int w, int h){
     pMax.y = h / PIXELS_PER_METER;
     pMin.z = BOX_ZMIN;
     pMax.z = BOX_ZMAX;
+    printf("Room bounds: x:[%f, %f] y:[%f, %f], z:[%f, %f]\n", pMin.x, pMax.x, pMin.y, pMax.y, pMin.z, pMax.z);
+
+    //ofVec3f listenPosCenter = ofVec3f(0.5f * (pMin.x + pMax.x), 0.5f * (pMin.y + pMax.y), 0.5f * (BOX_ZMIN + BOX_ZMAX));
+    leftListenPos = ofVec3f(0.9f*pMin.x + 0.1f*pMax.x, 0.5f*(pMin.y + pMax.y), 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    rightListenPos = ofVec3f(0.1f*pMin.x + 0.9f*pMax.x, 0.5f*(pMin.y + pMax.y), 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    printf("Left ear: (%f, %f, %f)\n", leftListenPos.x, leftListenPos.y, leftListenPos.z);
+    printf("Right ear: (%f, %f, %f)\n", rightListenPos.x, rightListenPos.y, rightListenPos.z);
 
     pointLight.setPosition(w / 2, 10.f, 0.5f*(BOX_ZMIN + BOX_ZMAX)*PIXELS_PER_METER);
 
