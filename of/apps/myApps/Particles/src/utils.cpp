@@ -168,3 +168,32 @@ void computeLegendrePolys(double x, int N, vector<double>& P_storage, vector<dou
     }
 }
 
+void computeLegendrePolysAndDerivatives(double x, int N, vector<double>& P_storage, vector<double*>& P,
+                                        vector<double>& P1_storage, vector<double*>& P1) {
+    assert(-1.0 <= x && x <= 1.0);
+    if (N <= 0) {
+        P_storage.clear();
+        P.clear();
+        P1_storage.clear();
+        P1.clear();
+        return;
+    }
+    computeLegendrePolys(x, N, P_storage, P);
+    P1_storage.resize(N*N);
+    P1.resize(N);
+    
+    double sqrt_one_minus_xx = sqrt(max(1.0 - x*x, 0.0));
+
+    P1[0] = &P1_storage[0];
+    P1[0][0] = 0.0;
+    for (int n = 1; n < N; n++) {
+        P1[n] = P1[n - 1] + (2 * n);
+        // compute P'(n) for all m except 2 outermost m
+        for (int m = -n + 1; m <= n - 1; m++) {
+            P1[n][m] = ( n*x*P[n][m] - (n + m)*P[n - 1][m] ) / (x*x - 1.0);
+        }
+        // compute P'(n) for m=n and m=-n
+        P1[n][n] = ( -(n + n)*sqrt_one_minus_xx*P[n][n - 1] - n*x*P[n][n] ) / (x*x - 1.0);
+        P1[n][-n] = ( sqrt_one_minus_xx*P[n][-n + 1] - n*x*P[n][-n] ) / (x*x - 1.0);
+    }
+}
