@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <iostream>
 #include <fstream>
+#include <omp.h>
 
 void readObj(const string& fileName, float scale, ofMesh& mesh, vector<float>& vertexAreaSums) {
     cout << "Reading geometry data from " << fileName << endl;
@@ -203,23 +204,22 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
     int numModes = omega.size();
     modeCoeffs.resize(numModes);
     modeExpansionOrders.resize(numModes);
-    modeExpansionMaxOrder = 0;
 
     vector<double> C_storage;
     vector<double*> C;
     computeYConstants(10, C_storage, C);    // N should be the max out of all the modes
 
-ofstream of("./mode_coeffs.txt", ios::out | ios::trunc);
+    //ofstream of("./mode_coeffs.txt", ios::out | ios::trunc);
+    omp_set_num_threads(4);
+    #pragma omp parallel for
     for (int j = 0; j < numModes; j++) {
+        printf("%d ", j);
         const vector<ofVec3f>& modeDisplacements = phi[j];
         double w = omega[j];
         double k = w / airC;
 
-        int N = 3;      // basis functions order, 1 past highest (e.g. 2 means dipoles);
+        int N = 4;      // basis functions order, 1 past highest (e.g. 2 means dipoles);
         modeExpansionOrders[j] = N;
-        if (N > modeExpansionMaxOrder) {
-            modeExpansionMaxOrder = N;
-        }
         
         const vector<ofVec3f>& vertices = mesh.getVertices();
         const vector<ofVec3f>& normals = mesh.getNormals();
@@ -251,7 +251,7 @@ ofstream of("./mode_coeffs.txt", ios::out | ios::trunc);
                     complex<double> dhdn = h1[n] * k * (p.dot(normal) / r);
                     complex<double> dedn_over_e = I*(double)m*(p.x*ny - p.y*nx) / (double)(p.x*p.x + p.y*p.y);
                     complex<double> dSdn = C[n][m] * exp(I*(double)m*phi) * (h[n]*P[n][m]*dedn_over_e + h[n]*dPdn + dhdn*P[n][m]);
-assert(!isnan(dSdn.real()) && !isnan(dSdn.imag()));
+
                     A(vi, col) = weight * dSdn;
                     col++;
 
@@ -268,7 +268,6 @@ assert(!isnan(dSdn.real()) && !isnan(dSdn.imag()));
             // compute element of b: the normal derivative of the transfer function
             // (Neumann boundary condition) at this vertex
             b(vi) = weight * fluidRho * w * w* modeDisplacements[vi].dot(normal);
-assert(!isnan(b(vi).real()) && !isnan(b(vi).imag()));
         }
 
         // Find least-squares solution to Ac = b using TSVD
@@ -284,11 +283,18 @@ assert(!isnan(b(vi).real()) && !isnan(b(vi).imag()));
         for (int i = 0; i < coeffs.size(); i++) {
             assert(!isnan(c(i).real()) && !isnan(c(i).imag()));
             coeffs[i] = c(i);
-            of << c(i).real() << "  " << c(i).imag() << endl;
+            //of << c(i).real() << "  " << c(i).imag() << endl;
         }
-        of << endl << endl;
+        //of << endl << endl;
     }
-of.close();
+//of.close();
+
+    modeExpansionMaxOrder = 0;
+    for (int j = 0; j < numModes; j++) {
+        if (modeExpansionOrders[j] > modeExpansionMaxOrder) {
+            modeExpansionMaxOrder = modeExpansionOrders[j];
+        }
+    }
 }
 
 // point should be given in obj space
