@@ -76,7 +76,6 @@ void RigidBody::readModes(const string& fileName, float E, float nu, float rho, 
     omega->clear();
     int numModes, numVertices;
     file >> numModes;
-numModes = 4;           // TESTESTSEIJOEjt;afjwoijfe;owaj;eo:TESTSETESTE TEST!!!!!!!
     file >> numVertices;
     float omegaMax = 0.f;
     float omegaMin = numeric_limits<float>::max();
@@ -87,7 +86,7 @@ numModes = 4;           // TESTESTSEIJOEjt;afjwoijfe;owaj;eo:TESTSETESTE TEST!!!
         // only record the underdamped modes
         float wi = omegaScale * sqrtf(eigenValue);
         float xii = 0.5f * (alpha / wi + beta*wi);
-        modeIsUnderdamped[i] = true;    // (0.f < xii && xii < 1.f);
+        modeIsUnderdamped[i] = (0.f < xii && xii < 1.f);
         if (modeIsUnderdamped[i]) {
             omega->push_back(wi);
             if (wi > omegaMax) {
@@ -242,8 +241,6 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
             vector<double*> P, P1;
             computeLegendrePolysAndDerivatives(p.z/r, N, P_storage, P, P1_storage, P1);
 
-            //double x2_plus_y2 = p.x*p.x + p.y*p.y;
-            //double sqrt_x2_plus_y2 = sqrt(x2_plus_y2);
             double nx = normal.x, ny = normal.y, nz = normal.z;
 
             int col = 0;
@@ -253,7 +250,7 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
                     complex<double> dhdn = h1[n] * k * (p.dot(normal) / r);
                     complex<double> dedn_over_e = I*(double)m*(p.x*ny - p.y*nx) / (double)(p.x*p.x + p.y*p.y);
                     complex<double> dSdn = C[n][m] * exp(I*(double)m*phi) * (h[n]*P[n][m]*dedn_over_e + h[n]*dPdn + dhdn*P[n][m]);
-                    
+assert(!isnan(dSdn.real()) && !isnan(dSdn.imag()));
                     A(vi, col) = weight * dSdn;
                     col++;
 
@@ -270,6 +267,7 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
             // compute element of b: the normal derivative of the transfer function
             // (Neumann boundary condition) at this vertex
             b(vi) = weight * fluidRho * w * w* modeDisplacements[vi].dot(normal);
+assert(!isnan(b(vi).real()) && !isnan(b(vi).imag()));
         }
 
         // Find least-squares solution to Ac = b using TSVD
@@ -283,6 +281,7 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
         vector<complex<double>>& coeffs = modeCoeffs[j];
         coeffs.resize(N*N);
         for (int i = 0; i < coeffs.size(); i++) {
+            assert(!isnan(c(i).real()) && !isnan(c(i).imag()));
             coeffs[i] = c(i);
         }
     }

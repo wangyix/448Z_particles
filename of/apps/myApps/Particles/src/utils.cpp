@@ -168,9 +168,13 @@ void computeLegendrePolys(double x, int N, vector<double>& P_storage, vector<dou
     }
 }
 
+// Formulas for derivatives as x->1 can be found here:
+//http://math.stackexchange.com/questions/391672/derivative-of-associated-legendre-polynomials-at-x-pm-1
 void computeLegendrePolysAndDerivatives(double x, int N, vector<double>& P_storage, vector<double*>& P,
                                         vector<double>& P1_storage, vector<double*>& P1) {
     assert(-1.0 <= x && x <= 1.0);
+    x = CLAMP(x, -0.999, 0.999);        // UGGHHHH. avoiding x=+-1 entirely for now.
+
     if (N <= 0) {
         P_storage.clear();
         P.clear();
@@ -182,7 +186,7 @@ void computeLegendrePolysAndDerivatives(double x, int N, vector<double>& P_stora
     P1_storage.resize(N*N);
     P1.resize(N);
     
-    double sqrt_one_minus_xx = sqrt(max(1.0 - x*x, 0.0));
+    double sqrt_one_minus_xx = sqrt(1.0 - x*x);
 
     P1[0] = &P1_storage[0];
     P1[0][0] = 0.0;
