@@ -76,6 +76,7 @@ void RigidBody::readModes(const string& fileName, float E, float nu, float rho, 
     omega->clear();
     int numModes, numVertices;
     file >> numModes;
+numModes = 4;           // TESTESTSEIJOEjt;afjwoijfe;owaj;eo:TESTSETESTE TEST!!!!!!!
     file >> numVertices;
     float omegaMax = 0.f;
     float omegaMin = numeric_limits<float>::max();
@@ -173,6 +174,30 @@ void RigidBody::computeMIBodyIBodyInv() {
     IInv = IBodyInv;
 }
 
+// For checking analytical dSdn value with numerical value
+/*static complex<double> Snm(int n, int m, const ofVec3f& p, double k) {
+    const complex<double> I(0.0, 1.0);
+
+    vector<double> C_storage;
+    vector<double*> C;
+    computeYConstants(n+1, C_storage, C);    // N should be the max out of all the modes
+
+    // compute row of A: the normal derivatives of each basis function at this vertex
+    double r = p.length();
+    //double theta = acos(x.z / r);
+    double phi = atan2(p.y, p.x);
+
+    vector<complex<double>> h;
+    computeHankels(k*r, n+1, h);
+
+    vector<double> P_storage;
+    vector<double*> P;
+    computeLegendrePolys(p.z / r, n+1, P_storage, P);
+
+    return h[n] * C[n][m] * P[n][m] * exp(I*(double)m*phi);
+}
+*/
+
 
 void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
     const double c = 340.0;
@@ -217,18 +242,27 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
             vector<double*> P, P1;
             computeLegendrePolysAndDerivatives(p.z/r, N, P_storage, P, P1_storage, P1);
 
-            double x2_plus_y2 = p.x*p.x + p.y*p.y;
-            double sqrt_x2_plus_y2 = sqrt(x2_plus_y2);
+            //double x2_plus_y2 = p.x*p.x + p.y*p.y;
+            //double sqrt_x2_plus_y2 = sqrt(x2_plus_y2);
             double nx = normal.x, ny = normal.y, nz = normal.z;
 
             int col = 0;
             for (int n = 0; n < N; n++) {
                 for (int m = -n; m <= n; m++) {
-                    complex<double> hpe1 = h[n] * P[n][m] * I*(double)m*(p.x*ny - p.y*nx) / (double)(x2_plus_y2);
-                    complex<double> hp1e = h[n] * P1[n][m] * (nz - p.z*(p.x*nx + p.y*ny)/x2_plus_y2) / sqrt_x2_plus_y2;
-                    complex<double> h1pe = h1[n] * k * (p.dot(normal) / r) * P[n][m];
-                    A(vi, col) = weight * C[n][m] * exp(I*(double)m*phi) * (hpe1 + hp1e + h1pe);
+                    complex<double> dPdn = P1[n][m] * (nz - p.z*(p.dot(normal)) / (r*r)) / r;
+                    complex<double> dhdn = h1[n] * k * (p.dot(normal) / r);
+                    complex<double> dedn_over_e = I*(double)m*(p.x*ny - p.y*nx) / (double)(p.x*p.x + p.y*p.y);
+                    complex<double> dSdn = C[n][m] * exp(I*(double)m*phi) * (h[n]*P[n][m]*dedn_over_e + h[n]*dPdn + dhdn*P[n][m]);
+                    
+                    A(vi, col) = weight * dSdn;
                     col++;
+
+                    /*// For checking analytical dSdn value with numerical value
+                    complex<double> analytical = dSdn;
+                    double eps = 0.001;
+                    complex<double> numerical = (Snm(n, m, p + eps*normal, k) - Snm(n, m, p - eps*normal, k)) / (2.0 * eps);;
+                    double relError = abs(analytical - numerical) / abs(analytical);
+                    printf("%lf\n", relError);*/
                 }
             }
             assert(col == N*N);
@@ -299,7 +333,7 @@ RigidBody::RigidBody(const string& modesFileName, float E, float nu, float rho, 
             }
         }
     }
-
+    
     // FOR TUNING DAMPING PARAMS
     topModes = true;
     nModesOnly = 94;
