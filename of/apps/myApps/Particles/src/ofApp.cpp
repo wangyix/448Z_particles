@@ -77,7 +77,7 @@ void ofApp::setup(){
 
     audioBuffer.pushZeros(AUDIO_SAMPLES_PAD);
 
-    qScale = 200.f;
+    pScale = 0.005f;
     accelAudioScale = 0.08f;
 }
 
@@ -289,9 +289,9 @@ void ofApp::update() {
 
     const float e = 0.5f;   // coefficient of restitution
 
-    float qSums[AUDIO_SAMPLE_RATE];    // 1 second worth
-    memset(qSums, 0, AUDIO_SAMPLE_RATE*sizeof(float));
-    int qsComputed = 0;
+    float pressure[AUDIO_SAMPLE_RATE];    // 1 second worth
+    memset(pressure, 0, AUDIO_SAMPLE_RATE*sizeof(float));
+    int psComputed = 0;
 
     // compute collisions of vertices against walls
     for (RigidBody& body : bodies) {
@@ -350,9 +350,9 @@ void ofApp::update() {
         body.stepW(dt);
 
         // compute modal noise amplitudes
-        int qsComputedThisBody = body.stepAudio(dt, impulses, 1.f / AUDIO_SAMPLE_RATE, qSums);
-        if (qsComputedThisBody > qsComputed) {
-            qsComputed = qsComputedThisBody;
+        int qsComputedThisBody = body.stepAudio(dt, impulses, 1.f / AUDIO_SAMPLE_RATE, listenPos, pressure);
+        if (qsComputedThisBody > psComputed) {
+            psComputed = qsComputedThisBody;
         }
     }
 
@@ -483,9 +483,9 @@ SConst *= 20.f;
         RigidBody& body = sphereBodies[i];
 
         // compute modal amplitues from impulses applied
-        int qsComputedThisBody = body.stepAudio(dt, sphereImpulses[i], 1.f / AUDIO_SAMPLE_RATE, qSums);
-        if (qsComputedThisBody > qsComputed) {
-            qsComputed = qsComputedThisBody;
+        int qsComputedThisBody = body.stepAudio(dt, sphereImpulses[i], 1.f / AUDIO_SAMPLE_RATE, listenPos, pressure);
+        if (qsComputedThisBody > psComputed) {
+            psComputed = qsComputedThisBody;
         }
     }
 
@@ -495,12 +495,12 @@ SConst *= 20.f;
     int audioSamplesComputed = 0;
 float maxSample = 0.f;
 float minSample = 0.f;
-    for (int k = 0; k < qsComputed; k++) {
+    for (int k = 0; k < psComputed; k++) {
         for (int i = 0; i < CHANNELS; i++) {
-            audioSamples[audioSamplesComputed++] = qScale * qSums[k];
+            audioSamples[audioSamplesComputed++] = pScale * pressure[k];
         }
-maxSample = max(maxSample, (qScale * qSums[k]));
-minSample = min(minSample, (qScale * qSums[k]));
+maxSample = max(maxSample, (pScale * pressure[k]));
+minSample = min(minSample, (pScale * pressure[k]));
     }
 if (maxSample > 1.f || minSample < -1.f) {
     printf("%f\t\t%f ------------------------\n", maxSample, minSample);
@@ -692,12 +692,12 @@ void ofApp::keyPressed(int key){
         topModes = !topModes;
         break;
     case '-':
-        qScale /= 1.1f;
-        printf("qScale = %f\n", qScale);
+        pScale /= 1.1f;
+        printf("pScale = %f\n", pScale);
         break;
     case '=':
-        qScale *= 1.1f;
-        printf("qScale = %f\n", qScale);
+        pScale *= 1.1f;
+        printf("pScale = %f\n", pScale);
         break;
     case ',':
         accelAudioScale /= 1.1f;

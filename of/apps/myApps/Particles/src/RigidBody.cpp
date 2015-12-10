@@ -215,6 +215,7 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
     vector<double*> C;
     computeYConstants(10, C_storage, C);    // N should be the max out of all the modes
 
+ofstream of("./mode_coeffs.txt", ios::out | ios::trunc);
     for (int j = 0; j < numModes; j++) {
         const vector<ofVec3f>& modeDisplacements = phi[j];
         double w = omega[j];
@@ -289,12 +290,15 @@ assert(!isnan(b(vi).real()) && !isnan(b(vi).imag()));
         for (int i = 0; i < coeffs.size(); i++) {
             assert(!isnan(c(i).real()) && !isnan(c(i).imag()));
             coeffs[i] = c(i);
+            of << c(i).real() << "  " << c(i).imag() << endl;
         }
+        of << endl << endl;
     }
+of.close();
 }
 
 // point should be given in obj space
-double RigidBody::evaluateAbsTransferFunction(const vector<complex<double>>& Y, int mode) {
+double RigidBody::evaluateAbsTransferFunction(const vector<complex<double>>& Y, int mode, double r) {
     const complex<double> I(0.0, 1.0);
     const double c = 340.0;
 
@@ -430,8 +434,11 @@ void RigidBody::stepW(float dt) {
 int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float dt_q,
                          const ofVec3f& listenPos, float* samples) {
 
+    ofVec3f listenPos_obj = RInv * listenPos;
+    float listenDist_obj = listenPos_obj.length();
+
     vector<complex<double>> sphericalHarmonics;
-    computeSphericalHarmonics(modeExpansionMaxOrder, RInv * listenPos, sphericalHarmonics);
+    computeSphericalHarmonics(modeExpansionMaxOrder, listenPos_obj, sphericalHarmonics);
 
     float h = dt_q;
 
@@ -480,7 +487,7 @@ if (0.f < xii && xii < 1.f &&   // for tuning damping params
     qk[i] = 0.f;
 }
             assert(!isnan(qk[i]));
-            pSum += qk[i] * evaluateAbsTransferFunction(sphericalHarmonics, i);
+            pSum += qk[i] * evaluateAbsTransferFunction(sphericalHarmonics, i, listenDist_obj);
         }
 
         samples[k] += pSum;

@@ -71,6 +71,6 @@ private:
 
     ofMatrix4x4 viewMatrix;
 
-    float qScale;
+    float pScale;
     float accelAudioScale;
 };

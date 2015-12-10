@@ -48,7 +48,7 @@ private:
     void readModes(const string& fileName, float E, float nu, float rho, float sizeScale,
         vector<vector<ofVec3f>>* phi, vector<float>* omega);
     void computeModeCoeffs(const vector<float>& vertexAreaSums);
-    double evaluateAbsTransferFunction(const vector<complex<double>>& Y, int mode);
+    double evaluateAbsTransferFunction(const vector<complex<double>>& Y, int mode, double r);
 public:
     ofMesh mesh;
     const Material& material;
