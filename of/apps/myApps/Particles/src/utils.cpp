@@ -240,3 +240,22 @@ void computeSphericalHarmonics(int N, const ofVec3f& p, vector<complex<double>>&
         }
     }
 }
+
+void computeSphericalHarmonics(int N, double theta, double phi, vector<complex<double>>& Y_storage) {
+    vector<double> C_storage;
+    vector<double*> C;
+    computeYConstants(N, C_storage, C);
+
+    vector<double> P_storage;
+    vector<double*> P;
+    computeLegendrePolys(cos(theta), N, P_storage, P);
+
+    Y_storage.resize(N*N);
+    int i = 0;
+    for (int n = 0; n < N; n++) {
+        for (int m = -n; m <= n; m++) {
+            Y_storage[i] = C[n][m] * P[n][m] * exp(I*(double)m*phi);
+            i++;
+        }
+    }
+}

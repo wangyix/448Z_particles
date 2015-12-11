@@ -175,7 +175,7 @@ void RigidBody::computeMIBodyIBodyInv() {
 }
 
 // For checking analytical dSdn value with numerical value
-/*static complex<double> Snm(int n, int m, const ofVec3f& p, double k) {
+static complex<double> Snm(int n, int m, const ofVec3f& p, double k) {
     vector<double> C_storage;
     vector<double*> C;
     computeYConstants(n+1, C_storage, C);    // N should be the max out of all the modes
@@ -194,32 +194,46 @@ void RigidBody::computeMIBodyIBodyInv() {
 
     return h[n] * C[n][m] * P[n][m] * exp(I*(double)m*phi);
 }
-*/
+
 
 
 void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
+    vector<complex<double>> Y;
+    computeSphericalHarmonics(3, 0.3, 0.4, Y);
+
     int numVertices = mesh.getNumVertices();
     assert(vertexAreaSums.size() == numVertices);
 
-    int numModes = omega.size();
+    int numModes = 8;   // omega.size();
     modeCoeffs.resize(numModes);
     modeExpansionOrders.resize(numModes);
 
+const int NUM_TRY_ORDERS = 30;
     vector<double> C_storage;
     vector<double*> C;
-    computeYConstants(10, C_storage, C);    // N should be the max out of all the modes
+    computeYConstants(NUM_TRY_ORDERS, C_storage, C);    // N should be the max out of all the modes
+        
 
-    //ofstream of("./mode_coeffs.txt", ios::out | ios::trunc);
+    vector<vector<double>> modeMeanErrors(numModes);
+    vector<vector<double>> modeMaxErrors(numModes);
+    vector<vector<double>> modeBNormErrors(numModes);
+    vector<vector<complex<double>>> mode5Coeffs(numModes);
+    vector<vector<complex<double>>> mode20Coeffs(numModes);
+
     omp_set_num_threads(4);
     #pragma omp parallel for
     for (int j = 0; j < numModes; j++) {
+
         printf("%d ", j);
         const vector<ofVec3f>& modeDisplacements = phi[j];
         double w = omega[j];
         double k = w / airC;
 
-        int N = 4;      // basis functions order, 1 past highest (e.g. 2 means dipoles);
-        modeExpansionOrders[j] = N;
+bool mode5CoeffsFound = false;
+bool mode20CoeffsFound = false;
+for (int N = 1; N <= NUM_TRY_ORDERS; N++) {
+        //int N = 4;      // basis functions order, 1 past highest (e.g. 2 means dipoles);
+        //modeExpansionOrders[j] = N;
         
         const vector<ofVec3f>& vertices = mesh.getVertices();
         const vector<ofVec3f>& normals = mesh.getNormals();
@@ -268,27 +282,122 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
             // compute element of b: the normal derivative of the transfer function
             // (Neumann boundary condition) at this vertex
             b(vi) = weight * fluidRho * w * w* modeDisplacements[vi].dot(normal);
+            
+            /*
+            // bvi test input
+            const double eps = 0.001;
+            complex<double> dpdn_test = (Snm(0, 0, p + eps*normal, k) - Snm(0, 0, p - eps*normal, k)) / (2.0*eps);
+            dpdn_test += 3.0*I*(Snm(1, 1, p + eps*normal, k) - Snm(1, 1, p - eps*normal, k)) / (2.0*eps);
+            dpdn_test += complex<double>(5.0,-7.0)*(Snm(2, -1, p + eps*normal, k) - Snm(2, -1, p - eps*normal, k)) / (2.0*eps);
+            b(vi) = weight * dpdn_test;
+            */
         }
 
-        // Find least-squares solution to Ac = b using TSVD
-        Eigen::JacobiSVD<Eigen::MatrixXcd> svd;
-        svd.setThreshold(0.000001);
-        svd.compute(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        // Find least-squares solution to Ac = b using 
+        Eigen::JacobiSVD<Eigen::MatrixXcd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        /*const Eigen::VectorXd& singularValues = svd.singularValues();
+        double threshold = 0.000001 * svd.singularValues()(0);
+        int rank = 0;
+        while (rank < singularValues.rows() && singularValues(rank) >= threshold) { rank++; }
+        Eigen::MatrixXcd U = svd.matrixU().leftCols(rank);
+        Eigen::MatrixXcd V = svd.matrixV().leftCols(rank);
+        Eigen::MatrixXcd S_inv = Eigen::MatrixXcd::Zero(rank, rank);
+        for (int i = 0; i < rank; i++) {
+            S_inv(i, i) = 1.0 / singularValues(i);
+        }
+        Eigen::MatrixXcd A_pseudoInv = V * S_inv * U.adjoint();
+        Eigen::VectorXcd c = A_pseudoInv * b;*/
+
         Eigen::VectorXcd c = svd.solve(b);
+        //double error = (c - c_usual).norm() / (c_usual).norm();
+
         assert(c.rows() == N*N);
 
         // Record solution as the multipole coefficients for this mode
-        vector<complex<double>>& coeffs = modeCoeffs[j];
+        /*vector<complex<double>>& coeffs = modeCoeffs[j];
         coeffs.resize(N*N);
         for (int i = 0; i < coeffs.size(); i++) {
             assert(!isnan(c(i).real()) && !isnan(c(i).imag()));
             coeffs[i] = c(i);
-            //of << c(i).real() << "  " << c(i).imag() << endl;
-        }
-        //of << endl << endl;
-    }
-//of.close();
+        }*/
 
+        double maxError = 0.0;
+        double meanError = 0.0;
+        Eigen::VectorXcd Ac_minus_b = A*c - b;
+        for (int i = 0; i < b.rows(); i++) {
+            double relError = abs(Ac_minus_b(i)) / abs(b(i));
+            maxError = max(relError, maxError);
+            meanError += relError;
+        }
+        meanError /= b.rows();
+
+
+        modeMeanErrors[j].push_back(meanError);
+        modeMaxErrors[j].push_back(maxError);
+        modeBNormErrors[j].push_back(Ac_minus_b.norm() / b.norm());
+
+        
+        double prevMeanError = (N - 1 > 0) ? modeMeanErrors[j][N - 2] : 100000.0;
+        if (((meanError <= 0.05 && prevMeanError > 0.05) || N == NUM_TRY_ORDERS) && !mode5CoeffsFound) {
+            mode5Coeffs[j].resize(N*N);
+            for (int i = 0; i < N*N; i++) {
+                mode5Coeffs[j][i] = c(i);
+            }
+            mode5CoeffsFound = true;
+
+            // use the 5% error coeffs for rendering sound
+            vector<complex<double>>& coeffs = modeCoeffs[j];
+            coeffs.resize(N*N);
+            for (int i = 0; i < coeffs.size(); i++) {
+                assert(!isnan(c(i).real()) && !isnan(c(i).imag()));
+                coeffs[i] = c(i);
+            }
+            modeExpansionOrders[j] = N;
+        }
+        if (((meanError <= 0.2 && prevMeanError > 0.2) || N == NUM_TRY_ORDERS) && !mode20CoeffsFound) {
+            mode20Coeffs[j].resize(N*N);
+            for (int i = 0; i < N*N; i++) {
+                mode20Coeffs[j][i] = c(i);
+            }
+            mode20CoeffsFound = true;
+        }
+        if (mode5CoeffsFound && mode20CoeffsFound) {
+            break;
+        }
+        
+}
+    }
+
+    ofstream of("./out.txt", ios::out | ios::trunc);
+    ofstream of5("./coeffs_5.txt", ios::out | ios::trunc);
+    ofstream of20("./coeffs_20.txt", ios::out | ios::trunc);
+
+    for (int j = 0; j < numModes; j++) {
+        of << endl << endl;
+        of << "mode " << j << ":  freq = " << omega[j] / (2.0*PI) << endl;
+        for (int i = 0; i < modeMeanErrors[j].size(); i++) {
+            of << "order " << i << ":  max error " << modeMaxErrors[j][i] * 100
+                << "%, mean error " << modeMeanErrors[j][i] * 100
+                << "%, |Ac-b|/|b| " << modeBNormErrors[j][i] * 100 << "%" << endl;
+        }
+
+        vector<complex<double>>& coeffs5 = mode5Coeffs[j];
+        of5 << endl << (int)(sqrt(coeffs5.size() + 0.5)) << endl;
+        for (int i = 0; i < coeffs5.size(); i++) {
+            of5 << coeffs5[i].real() << "\t\t" << coeffs5[i].imag() << endl;
+        }
+
+        vector<complex<double>>& coeffs20 = mode20Coeffs[j];
+        of20 << endl << (int)(sqrt(coeffs20.size() + 0.5)) << endl;
+        for (int i = 0; i < coeffs20.size(); i++) {
+            of20 << coeffs20[i].real() << "\t\t" << coeffs20[i].imag() << endl;
+        }
+    }
+
+    of.close();
+    of5.close();
+    of20.close();
+exit(1);
     modeExpansionMaxOrder = 0;
     for (int j = 0; j < numModes; j++) {
         if (modeExpansionOrders[j] > modeExpansionMaxOrder) {
