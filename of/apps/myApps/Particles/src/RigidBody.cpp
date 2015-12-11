@@ -198,17 +198,15 @@ static complex<double> Snm(int n, int m, const ofVec3f& p, double k) {
 
 
 void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
-    vector<complex<double>> Y;
-    computeSphericalHarmonics(3, 0.3, 0.4, Y);
 
     int numVertices = mesh.getNumVertices();
     assert(vertexAreaSums.size() == numVertices);
 
-    int numModes = 8;   // omega.size();
+    int numModes = omega.size();
     modeCoeffs.resize(numModes);
     modeExpansionOrders.resize(numModes);
 
-const int NUM_TRY_ORDERS = 30;
+const int NUM_TRY_ORDERS = 10;
     vector<double> C_storage;
     vector<double*> C;
     computeYConstants(NUM_TRY_ORDERS, C_storage, C);    // N should be the max out of all the modes
@@ -397,7 +395,7 @@ for (int N = 1; N <= NUM_TRY_ORDERS; N++) {
     of.close();
     of5.close();
     of20.close();
-exit(1);
+
     modeExpansionMaxOrder = 0;
     for (int j = 0; j < numModes; j++) {
         if (modeExpansionOrders[j] > modeExpansionMaxOrder) {
