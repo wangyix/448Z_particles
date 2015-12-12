@@ -23,4 +23,21 @@ void computeLegendrePolysAndDerivatives(double x, int N, vector<double>& P_stora
 void computeSphericalHarmonics(int N, const ofVec3f& p, vector<complex<double>>& Y_storage);
 void computeSphericalHarmonics(int N, double theta, double phi, vector<complex<double>>& Y_storage);
 
+//template<class fwditer>
+//fwditer random_unique(fwditer begin, fwditer end, size_t num_random);
+
+// http://stackoverflow.com/questions/9345087/choose-m-elements-randomly-from-a-vector-containing-n-elements
+template<class fwditer>
+fwditer random_unique(fwditer begin, fwditer end, size_t num_random) {
+    size_t left = std::distance(begin, end);
+    while (num_random--) {
+        fwditer r = begin;
+        std::advance(r, rand() % left);
+        std::swap(*begin, *r);
+        ++begin;
+        --left;
+    }
+    return begin;
+}
+
 #endif

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <omp.h>
+#include <random>
 
 void readObj(const string& fileName, float scale, ofMesh& mesh, vector<float>& vertexAreaSums) {
     cout << "Reading geometry data from " << fileName << endl;
@@ -198,91 +199,45 @@ static complex<double> Snm(int n, int m, const ofVec3f& p, double k) {
 
 
 void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
-
+    const vector<ofVec3f>& vertices = mesh.getVertices();
+    const vector<ofVec3f>& normals = mesh.getNormals();
     int numVertices = mesh.getNumVertices();
+    int numModes = omega.size();                                         // omega.size();   testsetsTESTESTSETESTEST
     assert(vertexAreaSums.size() == numVertices);
+    
+    const int N = 7;
+    const int CANDIDATES = 16;
+    const int MAX_SOURCES = 20;
 
-    int numModes = omega.size();
-    modeCoeffs.resize(numModes);
-    modeExpansionOrders.resize(numModes);
+    modeMultipoleSources.resize(numModes);
 
-const int NUM_TRY_ORDERS = 10;
     vector<double> C_storage;
     vector<double*> C;
-    computeYConstants(NUM_TRY_ORDERS, C_storage, C);    // N should be the max out of all the modes
-        
+    computeYConstants(N, C_storage, C);    // N should be the max out of all the modes
 
     vector<vector<double>> modeMeanErrors(numModes);
     vector<vector<double>> modeMaxErrors(numModes);
     vector<vector<double>> modeBNormErrors(numModes);
-    vector<vector<complex<double>>> mode5Coeffs(numModes);
-    vector<vector<complex<double>>> mode20Coeffs(numModes);
+
+    default_random_engine generator;
+    normal_distribution<float> normalDist(0.f, 0.9f/3.f);
+    uniform_real_distribution<float> uniformDist(0.3f, 0.9f);
 
     omp_set_num_threads(4);
     #pragma omp parallel for
     for (int j = 0; j < numModes; j++) {
+        printf("mode_%d ", j);
 
-        printf("%d ", j);
         const vector<ofVec3f>& modeDisplacements = phi[j];
         double w = omega[j];
         double k = w / airC;
 
-bool mode5CoeffsFound = false;
-bool mode20CoeffsFound = false;
-for (int N = 1; N <= NUM_TRY_ORDERS; N++) {
-        //int N = 4;      // basis functions order, 1 past highest (e.g. 2 means dipoles);
-        //modeExpansionOrders[j] = N;
-        
-        const vector<ofVec3f>& vertices = mesh.getVertices();
-        const vector<ofVec3f>& normals = mesh.getNormals();
-
-        Eigen::MatrixXcd A(numVertices, N*N);
+        // build vector b
         Eigen::VectorXcd b(numVertices);
-
-        for (int vi = 0; vi < mesh.getNumVertices(); vi++) {
-            const ofVec3f& p = vertices[vi];
-            const ofVec3f& normal = normals[vi];
-            double weight = vertexAreaSums[vi];
-            
-            // compute row of A: the normal derivatives of each basis function at this vertex
-            double r = p.length();
-            //double theta = acos(x.z / r);
-            double phi = atan2(p.y, p.x);
-            vector<complex<double>> h, h1;
-            computeHankelsAndDerivatives(k*r, N, h, h1);
-            vector<double> P_storage, P1_storage;
-            vector<double*> P, P1;
-            computeLegendrePolysAndDerivatives(p.z/r, N, P_storage, P, P1_storage, P1);
-
-            double nx = normal.x, ny = normal.y, nz = normal.z;
-
-            int col = 0;
-            for (int n = 0; n < N; n++) {
-                for (int m = -n; m <= n; m++) {
-                    complex<double> dPdn = P1[n][m] * (nz - p.z*(p.dot(normal)) / (r*r)) / r;
-                    complex<double> dhdn = h1[n] * k * (p.dot(normal) / r);
-                    complex<double> dedn_over_e = I*(double)m*(p.x*ny - p.y*nx) / (double)(p.x*p.x + p.y*p.y);
-                    complex<double> dSdn = C[n][m] * exp(I*(double)m*phi) * (h[n]*P[n][m]*dedn_over_e + h[n]*dPdn + dhdn*P[n][m]);
-
-                    A(vi, col) = weight * dSdn;
-                    col++;
-
-                    /*// For checking analytical dSdn value with numerical value
-                    complex<double> analytical = dSdn;
-                    double eps = 0.001;
-                    complex<double> numerical = (Snm(n, m, p + eps*normal, k) - Snm(n, m, p - eps*normal, k)) / (2.0 * eps);;
-                    double relError = abs(analytical - numerical) / abs(analytical);
-                    printf("%lf\n", relError);*/
-                }
-            }
-            assert(col == N*N);
-
-            // compute element of b: the normal derivative of the transfer function
-            // (Neumann boundary condition) at this vertex
-            b(vi) = weight * fluidRho * w * w* modeDisplacements[vi].dot(normal);
-            
-            /*
-            // bvi test input
+        for (int vi = 0; vi < numVertices; vi++) {
+            float weight = vertexAreaSums[vi];
+            b(vi) = weight * fluidRho * w * w * modeDisplacements[vi].dot(normals[vi]);
+            /*// bvi test input
             const double eps = 0.001;
             complex<double> dpdn_test = (Snm(0, 0, p + eps*normal, k) - Snm(0, 0, p - eps*normal, k)) / (2.0*eps);
             dpdn_test += 3.0*I*(Snm(1, 1, p + eps*normal, k) - Snm(1, 1, p - eps*normal, k)) / (2.0*eps);
@@ -291,141 +246,182 @@ for (int N = 1; N <= NUM_TRY_ORDERS; N++) {
             */
         }
 
-        // Find least-squares solution to Ac = b using 
-        Eigen::JacobiSVD<Eigen::MatrixXcd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        /*const Eigen::VectorXd& singularValues = svd.singularValues();
-        double threshold = 0.000001 * svd.singularValues()(0);
-        int rank = 0;
-        while (rank < singularValues.rows() && singularValues(rank) >= threshold) { rank++; }
-        Eigen::MatrixXcd U = svd.matrixU().leftCols(rank);
-        Eigen::MatrixXcd V = svd.matrixV().leftCols(rank);
-        Eigen::MatrixXcd S_inv = Eigen::MatrixXcd::Zero(rank, rank);
-        for (int i = 0; i < rank; i++) {
-            S_inv(i, i) = 1.0 / singularValues(i);
-        }
-        Eigen::MatrixXcd A_pseudoInv = V * S_inv * U.adjoint();
-        Eigen::VectorXcd c = A_pseudoInv * b;*/
+        Eigen::VectorXcd b_residual = b;     // residual
+        bool mode5CoeffsFound = false;
+        bool mode20CoeffsFound = false;
+        int sources = 0;
+        while ((/*!mode5CoeffsFound ||*/ !mode20CoeffsFound) && (sources++ < MAX_SOURCES)) {
+            //printf("%d ", sources);
 
-        Eigen::VectorXcd c = svd.solve(b);
-        //double error = (c - c_usual).norm() / (c_usual).norm();
+            const int numCandidates = min(CANDIDATES, numVertices);
 
-        assert(c.rows() == N*N);
-
-        // Record solution as the multipole coefficients for this mode
-        /*vector<complex<double>>& coeffs = modeCoeffs[j];
-        coeffs.resize(N*N);
-        for (int i = 0; i < coeffs.size(); i++) {
-            assert(!isnan(c(i).real()) && !isnan(c(i).imag()));
-            coeffs[i] = c(i);
-        }*/
-
-        double maxError = 0.0;
-        double meanError = 0.0;
-        Eigen::VectorXcd Ac_minus_b = A*c - b;
-        for (int i = 0; i < b.rows(); i++) {
-            double relError = abs(Ac_minus_b(i)) / abs(b(i));
-            maxError = max(relError, maxError);
-            meanError += relError;
-        }
-        meanError /= b.rows();
-
-
-        modeMeanErrors[j].push_back(meanError);
-        modeMaxErrors[j].push_back(maxError);
-        modeBNormErrors[j].push_back(Ac_minus_b.norm() / b.norm());
-
-        
-        double prevMeanError = (N - 1 > 0) ? modeMeanErrors[j][N - 2] : 100000.0;
-        if (((meanError <= 0.05 && prevMeanError > 0.05) || N == NUM_TRY_ORDERS) && !mode5CoeffsFound) {
-            mode5Coeffs[j].resize(N*N);
-            for (int i = 0; i < N*N; i++) {
-                mode5Coeffs[j][i] = c(i);
+            // pick candidate positions for the next source to add
+            vector<ofVec3f> candidatePositions(numCandidates);
+            vector<int> shuffledIndices(numVertices);
+            for (int i = 0; i < numVertices; i++) {
+                shuffledIndices[i] = i;
             }
-            mode5CoeffsFound = true;
+            random_unique(shuffledIndices.begin(), shuffledIndices.end(), numCandidates);
+            for (int i = 0; i < numCandidates; i++) {
+                const ofVec3f& vertex = vertices[shuffledIndices[i]];
+                //float a = min(abs(normalDist(generator)), 0.9f);
+                float a = uniformDist(generator);
+                candidatePositions[i] = a * vertex;
+            }
 
-            // use the 5% error coeffs for rendering sound
-            vector<complex<double>>& coeffs = modeCoeffs[j];
-            coeffs.resize(N*N);
-            for (int i = 0; i < coeffs.size(); i++) {
-                assert(!isnan(c(i).real()) && !isnan(c(i).imag()));
-                coeffs[i] = c(i);
+            // compute A matrix for each candidate position
+            //vector<Eigen::MatrixXcd> candidateAMatrices(numCandidates, Eigen::MatrixXcd(numVertices, N*N));
+            MultipoleSource bestCandidate;
+            Eigen::VectorXcd bestCandidateResidual;
+            double minResidualSqNorm = b_residual.squaredNorm();
+            for (int i = 0; i < numCandidates; i++) {
+                Eigen::MatrixXcd A(numVertices, N*N);
+                const ofVec3f& sourcePos = candidatePositions[i];
+
+                for (int vi = 0; vi < mesh.getNumVertices(); vi++) {
+                    const ofVec3f& p = vertices[vi] - sourcePos;
+                    const ofVec3f& normal = normals[vi];
+                    double weight = vertexAreaSums[vi];
+
+                    // compute row of A: the normal derivatives of each basis function at this vertex
+                    double r = p.length();
+                    //double theta = acos(x.z / r);
+                    double phi = atan2(p.y, p.x);
+                    vector<complex<double>> h, h1;
+                    computeHankelsAndDerivatives(k*r, N, h, h1);
+                    vector<double> P_storage, P1_storage;
+                    vector<double*> P, P1;
+                    computeLegendrePolysAndDerivatives(p.z / r, N, P_storage, P, P1_storage, P1);
+                    double nx = normal.x, ny = normal.y, nz = normal.z;
+                    int col = 0;
+                    for (int n = 0; n < N; n++) {
+                        for (int m = -n; m <= n; m++) {
+                            complex<double> dPdn = P1[n][m] * (nz - p.z*(p.dot(normal)) / (r*r)) / r;
+                            complex<double> dhdn = h1[n] * k * (p.dot(normal) / r);
+                            complex<double> dedn_over_e = I*(double)m*(p.x*ny - p.y*nx) / (double)(p.x*p.x + p.y*p.y);
+                            complex<double> dSdn = C[n][m] * exp(I*(double)m*phi) * (h[n] * P[n][m] * dedn_over_e + h[n] * dPdn + dhdn*P[n][m]);
+                            A(vi, col) = weight * dSdn;
+                            col++;
+                            /*// For checking analytical dSdn value with numerical value
+                            complex<double> analytical = dSdn;
+                            double eps = 0.001;
+                            complex<double> numerical = (Snm(n, m, p + eps*normal, k) - Snm(n, m, p - eps*normal, k)) / (2.0 * eps);;
+                            double relError = abs(analytical - numerical) / abs(analytical);
+                            printf("%lf\n", relError);*/
+                        }
+                    }
+                    assert(col == N*N);
+                }
+                Eigen::ColPivHouseholderQR<Eigen::MatrixXcd> qr(A);
+                Eigen::VectorXcd c = qr.solve(b_residual);
+                Eigen::VectorXcd candidateResidual = b_residual - A*c;
+                double candidateResidualSqNorm = candidateResidual.squaredNorm();
+                if (candidateResidualSqNorm < minResidualSqNorm) {
+                    minResidualSqNorm = candidateResidualSqNorm;
+                    bestCandidateResidual = candidateResidual;
+                    bestCandidate.pos = sourcePos;
+                    bestCandidate.N = N;
+                    bestCandidate.coeffs = c;
+                }
             }
-            modeExpansionOrders[j] = N;
-        }
-        if (((meanError <= 0.2 && prevMeanError > 0.2) || N == NUM_TRY_ORDERS) && !mode20CoeffsFound) {
-            mode20Coeffs[j].resize(N*N);
-            for (int i = 0; i < N*N; i++) {
-                mode20Coeffs[j][i] = c(i);
+
+            modeMultipoleSources[j].push_back(bestCandidate);
+            b_residual = bestCandidateResidual;
+
+
+
+            // record some errors
+            double maxError = 0.0;
+            double meanError = 0.0;
+            for (int i = 0; i < b.rows(); i++) {
+                double relError = abs(b_residual(i)) / abs(b(i));
+                maxError = max(relError, maxError);
+                meanError += relError;
             }
-            mode20CoeffsFound = true;
+            meanError /= b.rows();
+            double normError = b_residual.norm() / b.norm();
+
+            modeMeanErrors[j].push_back(meanError);
+            modeMaxErrors[j].push_back(maxError);
+            modeBNormErrors[j].push_back(normError);
+
+
+            const vector<double>& normErrors = modeBNormErrors[j];
+            double prevNormError = normErrors.size() > 1 ? normErrors[normErrors.size() - 2] : 100000.0;
+            if ((normError <= 0.05 && prevNormError > 0.05) && !mode5CoeffsFound) {
+                mode5CoeffsFound = true;
+            }
+            if ((normError <= 0.2 && prevNormError > 0.2) && !mode20CoeffsFound) {
+                mode20CoeffsFound = true;
+            }
+
+        } // while (!mode5CoeffsFound || !mode20CoeffsFound)
+
+    } // for each mode
+
+    modeExpansionMaxOrder = 0;
+    for (int j = 0; j < numModes; j++) {
+        const vector<MultipoleSource>& sources = modeMultipoleSources[j];
+        for (int i = 0; i < sources.size(); i++) {
+            if (sources[i].N > modeExpansionMaxOrder) {
+                modeExpansionMaxOrder = sources[i].N;
+            }
         }
-        if (mode5CoeffsFound && mode20CoeffsFound) {
-            break;
-        }
-        
-}
     }
 
     ofstream of("./out.txt", ios::out | ios::trunc);
-    ofstream of5("./coeffs_5.txt", ios::out | ios::trunc);
-    ofstream of20("./coeffs_20.txt", ios::out | ios::trunc);
 
     for (int j = 0; j < numModes; j++) {
         of << endl << endl;
         of << "mode " << j << ":  freq = " << omega[j] / (2.0*PI) << endl;
         for (int i = 0; i < modeMeanErrors[j].size(); i++) {
-            of << "order " << i << ":  max error " << modeMaxErrors[j][i] * 100
+            of << "Source " << i << " at " << modeMultipoleSources[j][i].pos << ".   max error " << modeMaxErrors[j][i] * 100
                 << "%, mean error " << modeMeanErrors[j][i] * 100
-                << "%, |Ac-b|/|b| " << modeBNormErrors[j][i] * 100 << "%" << endl;
-        }
-
-        vector<complex<double>>& coeffs5 = mode5Coeffs[j];
-        of5 << endl << (int)(sqrt(coeffs5.size() + 0.5)) << endl;
-        for (int i = 0; i < coeffs5.size(); i++) {
-            of5 << coeffs5[i].real() << "\t\t" << coeffs5[i].imag() << endl;
-        }
-
-        vector<complex<double>>& coeffs20 = mode20Coeffs[j];
-        of20 << endl << (int)(sqrt(coeffs20.size() + 0.5)) << endl;
-        for (int i = 0; i < coeffs20.size(); i++) {
-            of20 << coeffs20[i].real() << "\t\t" << coeffs20[i].imag() << endl;
+                << "%, |b_res|/|b| " << modeBNormErrors[j][i] * 100 << "%" << endl;
         }
     }
 
     of.close();
-    of5.close();
-    of20.close();
 
-    modeExpansionMaxOrder = 0;
-    for (int j = 0; j < numModes; j++) {
-        if (modeExpansionOrders[j] > modeExpansionMaxOrder) {
-            modeExpansionMaxOrder = modeExpansionOrders[j];
-        }
-    }
+
 }
 
-// point should be given in obj space
-double RigidBody::evaluateAbsTransferFunction(const vector<complex<double>>& Y, int mode, double r) {
-    float w = omega[mode];
-    double k = w / airC;
-    int N = modeExpansionOrders[mode];
-    const vector<complex<double>>& coeffs = modeCoeffs[mode];
-    assert(coeffs.size() == N*N);
+complex<double> MultipoleSource::evaluate(const ofVec3f& x, double k, const vector<double*>& C) const {
+    ofVec3f p = x - pos;
+    double r = p.length();
+    //double theta = acos(x.z / r);
+    double phi = atan2(p.y, p.x);
 
     vector<complex<double>> h;
     computeHankels(k*r, N, h);
 
-    complex<double> expansionSum(0.0, 0.0);
+    vector<double> P_storage;
+    vector<double*> P;
+    computeLegendrePolys(p.z / r, N, P_storage, P);
+
+    complex<double> sum(0.0, 0.0);
     int i = 0;
     for (int n = 0; n < N; n++) {
         for (int m = -n; m <= n; m++) {
-            complex<double> Snm = h[n] * Y[i];
-            expansionSum += (coeffs[i] * Snm);
+            complex<double> Snm = h[n] * C[n][m] * P[n][m] * exp(I*(double)m*phi);
+            sum += (coeffs(i) * Snm);
             i++;
         }
     }
-    assert(i == N*N);
-    return abs(expansionSum);
+    return sum;
+}
+
+// point should be given in obj space
+double RigidBody::evaluateAbsTransferFunction(const ofVec3f& x, int mode, const vector<double*>& C) {
+    float w = omega[mode];
+    double k = w / airC;
+    
+    const vector<MultipoleSource>& sources = modeMultipoleSources[mode];
+    complex<double> sum(0.0, 0.0);
+    for (int i = 0; i < sources.size(); i++) {
+        sum += sources[i].evaluate(x, k, C);
+    }
+    return abs(sum);
 }
 
 
@@ -547,13 +543,17 @@ int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float 
     float listenDist1_obj = listenPos1_obj.length();
     ofVec3f listenPos2_obj = RInv * (listenPos2 - x);
     float listenDist2_obj = listenPos2_obj.length();
-    vector<complex<double>> sphericalHarmonics1;
-    vector<complex<double>> sphericalHarmonics2;
-    computeSphericalHarmonics(modeExpansionMaxOrder, listenPos1_obj, sphericalHarmonics1);
-    computeSphericalHarmonics(modeExpansionMaxOrder, listenPos2_obj, sphericalHarmonics2);
+
+    vector<double> C_storage1, C_storage2;
+    vector<double*> C1, C2;
+    computeYConstants(modeExpansionMaxOrder, C_storage1, C1);
+    computeYConstants(modeExpansionMaxOrder, C_storage2, C2);
+
+    omp_set_num_threads(4);
+    #pragma omp parallel for
     for (int i = 0; i < numModes; i++) {
-        absTransferFunctions1[i] = evaluateAbsTransferFunction(sphericalHarmonics1, i, listenDist1_obj);
-        absTransferFunctions2[i] = evaluateAbsTransferFunction(sphericalHarmonics2, i, listenDist2_obj);
+        absTransferFunctions1[i] = evaluateAbsTransferFunction(listenPos1_obj, i, C1);
+        absTransferFunctions2[i] = evaluateAbsTransferFunction(listenPos2_obj, i, C2);
     }
 
     float h = dt_q;
@@ -605,7 +605,7 @@ if (0.f < xii && xii < 1.f &&   // for tuning damping params
 }
             assert(!isnan(qk[i]));
             pSum1 += qk[i] * absTransferFunctions1[i];
-            pSum2 += qk[i] * absTransferFunctions2[i];  // CHANGE THIS BACK TO 2!!!!!!!!!!!!
+            pSum2 += qk[i] * absTransferFunctions2[i];
         }
 
         samples[2*k] += pSum1;

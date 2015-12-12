@@ -24,6 +24,13 @@ struct VertexImpulse {
     ofVec3f impulse;
 };
 
+struct MultipoleSource {
+    complex<double> evaluate(const ofVec3f& x, double k, const vector<double*>& C) const;
+    ofVec3f pos;
+    int N;
+    Eigen::VectorXcd coeffs;
+};
+
 struct RigidBody {
 public:
     RigidBody(const string& modesFileName, float E, float nu, float rho, float alpha, float beta, 
@@ -48,7 +55,7 @@ private:
     void readModes(const string& fileName, float E, float nu, float rho, float sizeScale,
         vector<vector<ofVec3f>>* phi, vector<float>* omega);
     void computeModeCoeffs(const vector<float>& vertexAreaSums);
-    double evaluateAbsTransferFunction(const vector<complex<double>>& Y, int mode, double r);
+    double evaluateAbsTransferFunction(const ofVec3f& x, int mode, const vector<double*>& C);
 public:
     ofMesh mesh;
     const Material& material;
@@ -115,9 +122,9 @@ public:
     ASSERT_EQ(r,    S.rows());
     ASSERT_EQ(1,    S.cols());
   */
-    vector<int> modeExpansionOrders;
+
+    vector<vector<MultipoleSource>> modeMultipoleSources;
     int modeExpansionMaxOrder;
-    vector<vector<complex<double>>> modeCoeffs;
 };
 
 #endif
