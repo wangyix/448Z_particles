@@ -205,9 +205,9 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
     int numModes = omega.size();                                         // omega.size();   testsetsTESTESTSETESTEST
     assert(vertexAreaSums.size() == numVertices);
     
-    const int N = 7;
-    const int CANDIDATES = 16;
-    const int MAX_SOURCES = 20;
+    const int N = 7;    // 7;
+    const int CANDIDATES = 1;   // 16;
+    const int MAX_SOURCES = 1; //20;
 
     modeMultipoleSources.resize(numModes);
 

@@ -626,6 +626,9 @@ void ofApp::draw(){
     topWall.draw();
     bottomWall.draw();
     
+    drawPoint(leftListenPos, 0.02f, ofColor(255, 0, 0));
+    drawPoint(rightListenPos, 0.02f, ofColor(0, 255, 0));
+
     for (RigidBody* bodyPtr : allBodies) {
         RigidBody& body = *bodyPtr;
         ofSetColor(body.material.color);
@@ -674,6 +677,20 @@ void ofApp::audioOut(float* output, int bufferSize, int nChannels) {
     for (int i = 0; i < CHANNELS * BUFFER_SIZE; i++) {
         output[i] = buffer1[i] + buffer2[i];
     }
+}
+
+void ofApp::translateListenPos(const ofVec3f& t) {
+    leftListenPos += t;
+    rightListenPos += t;
+}
+void ofApp::rotateListenPos(const ofVec3f& axis, float deg) {
+    ofVec3f center = 0.5f * (leftListenPos + rightListenPos);
+    ofVec3f toLeft = leftListenPos - center;
+    ofVec3f toRight = rightListenPos - center;
+    toLeft.rotate(deg, axis);
+    toRight.rotate(deg, axis);
+    leftListenPos = center + toLeft;
+    rightListenPos = center + toRight;
 }
 
 //--------------------------------------------------------------
@@ -733,6 +750,30 @@ void ofApp::keyPressed(int key){
     case '.':
         accelAudioScale *= 1.1f;
         printf("accelAudioScale = %f\n", accelAudioScale);
+        break;
+    case '[':
+        rotateListenPos(ofVec3f(0.f, 0.f, 1.f), 5.f);
+        break;
+    case ']':
+        rotateListenPos(ofVec3f(0.f, 0.f, 1.f), -5.f);
+        break;
+    case OF_KEY_LEFT_SHIFT:
+        translateListenPos(ofVec3f(0.f, -0.02f, 0.f));
+        break;
+    case OF_KEY_LEFT_CONTROL:
+        translateListenPos(ofVec3f(0.f, 0.02f, 0.f));
+        break;
+    case 'w':
+        translateListenPos(ofVec3f(0.f, 0.f, -0.02f));
+        break;
+    case 's':
+        translateListenPos(ofVec3f(0.f, 0.f, 0.02f));
+        break;
+    case 'a':
+        translateListenPos(ofVec3f(-0.02f, 0.f, 0.f));
+        break;
+    case 'd':
+        translateListenPos(ofVec3f(0.02f, 0.f, 0.f));
         break;
     default:
         break;
@@ -802,8 +843,8 @@ void ofApp::windowResized(int w, int h){
     printf("Room bounds: x:[%f, %f] y:[%f, %f], z:[%f, %f]\n", pMin.x, pMax.x, pMin.y, pMax.y, pMin.z, pMax.z);
 
     //ofVec3f listenPosCenter = ofVec3f(0.5f * (pMin.x + pMax.x), 0.5f * (pMin.y + pMax.y), 0.5f * (BOX_ZMIN + BOX_ZMAX));
-    leftListenPos = ofVec3f(0.9f*pMin.x + 0.1f*pMax.x, 0.5f*(pMin.y + pMax.y), 0.5f*(BOX_ZMIN + BOX_ZMAX));
-    rightListenPos = ofVec3f(0.1f*pMin.x + 0.9f*pMax.x, 0.5f*(pMin.y + pMax.y), 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    leftListenPos = ofVec3f(0.8f*pMin.x + 0.2f*pMax.x, 0.5f*(pMin.y + pMax.y), 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    rightListenPos = ofVec3f(0.2f*pMin.x + 0.8f*pMax.x, 0.5f*(pMin.y + pMax.y), 0.5f*(BOX_ZMIN + BOX_ZMAX));
     printf("Left ear: (%f, %f, %f)\n", leftListenPos.x, leftListenPos.y, leftListenPos.z);
     printf("Right ear: (%f, %f, %f)\n", rightListenPos.x, rightListenPos.y, rightListenPos.z);
 
@@ -826,6 +867,12 @@ void ofApp::windowResized(int w, int h){
     topWall.rotate(-90.f, 1.f, 0.f, 0.f);
     bottomWall.setPosition(w / 2, h, 0.5f*(BOX_ZMIN + BOX_ZMAX)*PIXELS_PER_METER);
     bottomWall.rotate(90.f, 1.f, 0.f, 0.f);
+
+    // put all objects at center of room
+    ofVec3f center = 0.5f * (pMin + pMax);
+    for (RigidBody* body : allBodies) {
+        body->x = center;
+    }
 }
 
 //--------------------------------------------------------------

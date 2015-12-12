@@ -46,6 +46,8 @@ private:
     int particleCollideWall(const ofVec3f& p, const ofVec3f& v, float tMin, float* t);
     int sphereCollideWall(const ofVec3f& p, const ofVec3f& v, float r, float tMin, float* t);
 
+    void translateListenPos(const ofVec3f& t);
+    void rotateListenPos(const ofVec3f& axis, float deg);
 private:
     ofLight pointLight;
     ofPlanePrimitive leftWall, rightWall, bottomWall, topWall, backWall;

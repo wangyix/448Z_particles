@@ -25,6 +25,7 @@ struct VertexImpulse {
 };
 
 struct MultipoleSource {
+    MultipoleSource() : pos(0.f, 0.f, 0.f), N(0), coeffs(0) {}
     complex<double> evaluate(const ofVec3f& x, double k, const vector<double*>& C) const;
     ofVec3f pos;
     int N;
