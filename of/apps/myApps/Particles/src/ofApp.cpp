@@ -35,14 +35,14 @@ void ofApp::setup(){
     windowResized(ofGetWidth(), ofGetHeight());
 
     // initialize rigid bodies
-    bodies.push_back(RigidBody(groundModesFileName, 2e11f, 0.4f, 1.f, 30.f, 1e-11f, groundObjFileName, PLASTIC_MATERIAL, 0.008f));
-    //bodies.push_back(RigidBody(rodModesFileName, 7e10f, 0.3f, 1.f, 50.f, 1e-11f, rodObjFileName, PLASTIC_MATERIAL, 1.f));
+    //bodies.push_back(RigidBody(groundModesFileName, 2e11f, 0.4f, 1.f, 30.f, 1e-11f, groundObjFileName, PLASTIC_MATERIAL, 0.008f));
+    bodies.push_back(RigidBody(rodModesFileName, 7e10f, 0.3f, 1.f, 50.f, 1e-11f, rodObjFileName, PLASTIC_MATERIAL, 1.f));
     //sphereBodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.04f, true));
     //sphereBodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.06f, true));
     //sphereBodies.push_back(RigidBody(sphereModesFileName, 7e10f, 0.3f, 1.f, 30.f, 1e-11f, sphereObjFileName, PLASTIC_MATERIAL, 0.09f, true));
 
     bodies[0].x = 0.5f * pMin + 0.5f * pMax;
-    //sphereBodies[0].x = 0.25f * pMin + 0.75f * pMax;// +ofVec3f(0.f, 2.f, 0.f);
+    //sphereBodies[0].x = 0.5f * pMin + 0.5f * pMax;// +ofVec3f(0.f, 2.f, 0.f);
     //sphereBodies[1].x = sphereBodies[0].x + ofVec3f(-0.2f, 0.f, 0.f);//0.5f * pMin + 0.5f * pMax;
     //sphereBodies[2].x = sphereBodies[1].x + ofVec3f(-0.2f, 0.f, 0.f);//0.5f * pMin + 0.5f * pMax;
     //bodies[2].x = 0.75f * pMin + 0.25f * pMax;
@@ -843,8 +843,8 @@ void ofApp::windowResized(int w, int h){
     printf("Room bounds: x:[%f, %f] y:[%f, %f], z:[%f, %f]\n", pMin.x, pMax.x, pMin.y, pMax.y, pMin.z, pMax.z);
 
     //ofVec3f listenPosCenter = ofVec3f(0.5f * (pMin.x + pMax.x), 0.5f * (pMin.y + pMax.y), 0.5f * (BOX_ZMIN + BOX_ZMAX));
-    leftListenPos = ofVec3f(0.8f*pMin.x + 0.2f*pMax.x, 0.5f*(pMin.y + pMax.y), 0.5f*(BOX_ZMIN + BOX_ZMAX));
-    rightListenPos = ofVec3f(0.2f*pMin.x + 0.8f*pMax.x, 0.5f*(pMin.y + pMax.y), 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    leftListenPos = ofVec3f(0.8f*pMin.x + 0.2f*pMax.x, pMax.y, 0.5f*(BOX_ZMIN + BOX_ZMAX));
+    rightListenPos = ofVec3f(0.2f*pMin.x + 0.8f*pMax.x, pMax.y, 0.5f*(BOX_ZMIN + BOX_ZMAX));
     printf("Left ear: (%f, %f, %f)\n", leftListenPos.x, leftListenPos.y, leftListenPos.z);
     printf("Right ear: (%f, %f, %f)\n", rightListenPos.x, rightListenPos.y, rightListenPos.z);
 

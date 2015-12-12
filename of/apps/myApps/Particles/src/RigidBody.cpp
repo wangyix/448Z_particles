@@ -205,9 +205,9 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
     int numModes = omega.size();                                         // omega.size();   testsetsTESTESTSETESTEST
     assert(vertexAreaSums.size() == numVertices);
     
-    const int N = 7;    // 7;
-    const int CANDIDATES = 1;   // 16;
-    const int MAX_SOURCES = 1; //20;
+    const int N = 7;
+    const int CANDIDATES = 2;
+    const int MAX_SOURCES = 20;
 
     modeMultipoleSources.resize(numModes);
 
@@ -272,7 +272,7 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
             // compute A matrix for each candidate position
             //vector<Eigen::MatrixXcd> candidateAMatrices(numCandidates, Eigen::MatrixXcd(numVertices, N*N));
             MultipoleSource bestCandidate;
-            Eigen::VectorXcd bestCandidateResidual;
+            Eigen::VectorXcd bestCandidateResidual = b_residual;
             double minResidualSqNorm = b_residual.squaredNorm();
             for (int i = 0; i < numCandidates; i++) {
                 Eigen::MatrixXcd A(numVertices, N*N);
@@ -369,21 +369,45 @@ void RigidBody::computeModeCoeffs(const vector<float>& vertexAreaSums) {
         }
     }
 
-    ofstream of("./out.txt", ios::out | ios::trunc);
+    stringstream foldername;
+    foldername << N << "_" << CANDIDATES << "_" << MAX_SOURCES;
+    ofstream of("../out/" + foldername.str() + "_out.txt", ios::out | ios::trunc);
+    ofstream of1("../out/" + foldername.str() + "_n_srcs_20_error.txt", ios::out | ios::trunc);
+    ofstream of2("../out/" + foldername.str() + "_error_at_max_srcs.txt", ios::out | ios::trunc);
 
     for (int j = 0; j < numModes; j++) {
+        int numSources = modeMultipoleSources[j].size();
+
         of << endl << endl;
         of << "mode " << j << ":  freq = " << omega[j] / (2.0*PI) << endl;
-        for (int i = 0; i < modeMeanErrors[j].size(); i++) {
+        for (int i = 0; i < numSources; i++) {
             of << "Source " << i << " at " << modeMultipoleSources[j][i].pos << ".   max error " << modeMaxErrors[j][i] * 100
                 << "%, mean error " << modeMeanErrors[j][i] * 100
                 << "%, |b_res|/|b| " << modeBNormErrors[j][i] * 100 << "%" << endl;
         }
+
+        // write # of sources it took to get error below 20%
+        double prevError = 1.0;
+        int i;
+        for (i = 0; i < numSources; i++) {
+            double error = modeBNormErrors[j][i];
+            if (prevError > 0.2 && error <= 0.2) {
+                of1 << (i + 1) << endl;
+                break;
+            }
+            prevError = error;
+        }
+        if (i == numSources) {
+            of1 << "-1" << endl;
+        }
+
+        // write % error after adding all sources
+        of2 << modeBNormErrors[j].back() << endl;
     }
 
     of.close();
-
-
+    of1.close();
+    of2.close();
 }
 
 complex<double> MultipoleSource::evaluate(const ofVec3f& x, double k, const vector<double*>& C) const {
@@ -540,20 +564,17 @@ int RigidBody::stepAudio(float dt, const vector<VertexImpulse>& impulses, float 
     vector<float> absTransferFunctions2(numModes);
 
     ofVec3f listenPos1_obj = RInv * (listenPos1 - x);
-    float listenDist1_obj = listenPos1_obj.length();
     ofVec3f listenPos2_obj = RInv * (listenPos2 - x);
-    float listenDist2_obj = listenPos2_obj.length();
 
-    vector<double> C_storage1, C_storage2;
-    vector<double*> C1, C2;
-    computeYConstants(modeExpansionMaxOrder, C_storage1, C1);
-    computeYConstants(modeExpansionMaxOrder, C_storage2, C2);
+    vector<double> C_storage;
+    vector<double*> C;
+    computeYConstants(modeExpansionMaxOrder, C_storage, C);
 
     omp_set_num_threads(4);
     #pragma omp parallel for
     for (int i = 0; i < numModes; i++) {
-        absTransferFunctions1[i] = evaluateAbsTransferFunction(listenPos1_obj, i, C1);
-        absTransferFunctions2[i] = evaluateAbsTransferFunction(listenPos2_obj, i, C2);
+        absTransferFunctions1[i] = evaluateAbsTransferFunction(listenPos1_obj, i, C);
+        absTransferFunctions2[i] = evaluateAbsTransferFunction(listenPos2_obj, i, C);
     }
 
     float h = dt_q;
